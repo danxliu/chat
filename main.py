@@ -1,18 +1,19 @@
-from agent import get_agent
+import asyncio
+from agent import InfiniteAgentWorkflow
 
 
-def main():
-    print("Initializing Agent...")
-    agent = get_agent()
+async def main():
+    print("Initializing Agent Workflow...")
+    workflow = InfiniteAgentWorkflow(timeout=3600.0)
 
     query = "Hello! Can you confirm you are connected?"
     print(f"\nSending Query: '{query}'")
 
-    response = agent.chat(query)
+    response = await workflow.run(query=query)
 
     print("\nFinal Response:")
     print(str(response))
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
