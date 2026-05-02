@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     model: str = "local-model"
     max_tokens: int = 8192
     temperature: float = 0.1
+    step_threshold: int = 15
 
 
 settings = Settings()

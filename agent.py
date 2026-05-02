@@ -17,6 +17,7 @@ from llama_index.core.workflow import (
 from llama_index.llms.openai_like import OpenAILike
 
 from config import settings
+from prompts import STARTING_PROMPT_TEMPLATE, RESUMING_PROMPT_TEMPLATE, RichPromptTemplate
 from tools.finish import get_finish_tool
 from tools.web_search import web_search
 from tools.web_scrape import web_scrape
@@ -65,7 +66,17 @@ class InfiniteAgentWorkflow(Workflow):
         if not session_id:
             session_id = str(uuid.uuid4())
             await ctx.set("session_id", session_id)
-        return LoopEvent(query=query)
+            
+        prompt = RichPromptTemplate(STARTING_PROMPT_TEMPLATE)
+        formatted_query = prompt.format(
+            query=query,
+            step_threshold=settings.step_threshold,
+            work_dir=os.getcwd(),
+            current_pid=os.getpid()
+        )
+        
+        await ctx.set("continuation_number", 0)
+        return LoopEvent(query=formatted_query)
 
     @step
     async def loop(self, ctx: Context, ev: LoopEvent) -> StopEvent | LoopEvent:
@@ -97,7 +108,16 @@ class InfiniteAgentWorkflow(Workflow):
         if continue_task_flag:
             state = _get_session_state(session_id)
             summary = state.get("summary", "")
-            next_query = f"Previous task context summary:\n{summary}\n\nPlease continue the original request."
+            
+            continuation_number = await ctx.get("continuation_number", default=0) + 1
+            await ctx.set("continuation_number", continuation_number)
+            
+            prompt = RichPromptTemplate(RESUMING_PROMPT_TEMPLATE)
+            next_query = prompt.format(
+                progress_text=summary,
+                continuation_number=continuation_number
+            )
+            
             await ctx.set("continue_task", False)
             return LoopEvent(query=next_query)
         return StopEvent(result=str(response))
