@@ -18,6 +18,10 @@ from llama_index.llms.openai_like import OpenAILike
 
 from config import settings
 from tools.finish import get_finish_tool
+from tools.web_search import web_search
+from tools.web_scrape import web_scrape
+from tools.finance import get_stock_data, get_stock_history
+from tools.execute_python import execute_python
 
 
 class LoopEvent(Event):
@@ -70,8 +74,21 @@ class InfiniteAgentWorkflow(Workflow):
 
         llm = get_llm()
         finish_tool = get_finish_tool(ctx, session_id)
+        
+        web_search_tool = FunctionTool.from_defaults(fn=web_search)
+        web_scrape_tool = FunctionTool.from_defaults(fn=web_scrape)
+        get_stock_data_tool = FunctionTool.from_defaults(fn=get_stock_data)
+        get_stock_history_tool = FunctionTool.from_defaults(fn=get_stock_history)
+        execute_python_tool = FunctionTool.from_defaults(fn=execute_python)
 
-        agent = create_agent(llm, tools=[finish_tool])
+        agent = create_agent(llm, tools=[
+            finish_tool,
+            web_search_tool,
+            web_scrape_tool,
+            get_stock_data_tool,
+            get_stock_history_tool,
+            execute_python_tool
+        ])
 
         response = await agent.achat(query)
 
@@ -89,4 +106,17 @@ class InfiniteAgentWorkflow(Workflow):
 def get_agent() -> AgentRunner:
     """Convenience function to initialize and return the fully configured agent."""
     llm = get_llm()
-    return create_agent(llm, tools=[])
+    
+    web_search_tool = FunctionTool.from_defaults(fn=web_search)
+    web_scrape_tool = FunctionTool.from_defaults(fn=web_scrape)
+    get_stock_data_tool = FunctionTool.from_defaults(fn=get_stock_data)
+    get_stock_history_tool = FunctionTool.from_defaults(fn=get_stock_history)
+    execute_python_tool = FunctionTool.from_defaults(fn=execute_python)
+
+    return create_agent(llm, tools=[
+        web_search_tool,
+        web_scrape_tool,
+        get_stock_data_tool,
+        get_stock_history_tool,
+        execute_python_tool
+    ])
