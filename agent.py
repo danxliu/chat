@@ -25,7 +25,7 @@ from tools.web_scrape import web_scrape
 from tools.finance import get_stock_data, get_stock_history
 from tools.execute_python import execute_python
 from tools.ask_user import ask_user
-from tools.trading import get_account_info, get_positions, place_order
+from tools.trading import get_account_info, get_positions, place_order, get_tickers
 
 
 class LoopEvent(Event):
@@ -42,6 +42,7 @@ def get_llm() -> OpenAILike:
         is_chat_model=True,
         temperature=settings.temperature,
         max_tokens=settings.max_tokens,
+        timeout=settings.timeout,
     )
 
 
@@ -99,6 +100,7 @@ class InfiniteAgentWorkflow(Workflow):
         get_account_info_tool = FunctionTool.from_defaults(fn=get_account_info)
         get_positions_tool = FunctionTool.from_defaults(fn=get_positions)
         place_order_tool = FunctionTool.from_defaults(fn=place_order)
+        get_tickers_tool = FunctionTool.from_defaults(fn=get_tickers)
 
         agent = create_agent(llm, tools=[
             finish_tool,
@@ -110,7 +112,8 @@ class InfiniteAgentWorkflow(Workflow):
             ask_user_tool,
             get_account_info_tool,
             get_positions_tool,
-            place_order_tool
+            place_order_tool,
+            get_tickers_tool
         ])
 
         response = await agent.achat(query)
@@ -149,6 +152,7 @@ def get_agent() -> AgentRunner:
     get_account_info_tool = FunctionTool.from_defaults(fn=get_account_info)
     get_positions_tool = FunctionTool.from_defaults(fn=get_positions)
     place_order_tool = FunctionTool.from_defaults(fn=place_order)
+    get_tickers_tool = FunctionTool.from_defaults(fn=get_tickers)
 
     return create_agent(llm, tools=[
         web_search_tool,
@@ -159,5 +163,6 @@ def get_agent() -> AgentRunner:
         ask_user_tool,
         get_account_info_tool,
         get_positions_tool,
-        place_order_tool
+        place_order_tool,
+        get_tickers_tool
     ])

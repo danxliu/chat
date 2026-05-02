@@ -1,6 +1,6 @@
 from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest
-from alpaca.trading.enums import OrderSide, TimeInForce, OrderType
+from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest, GetAssetsRequest
+from alpaca.trading.enums import OrderSide, TimeInForce, OrderType, AssetStatus, AssetClass
 from config import settings
 
 def _get_trading_client():
@@ -47,6 +47,48 @@ def get_positions() -> str:
         return "\n".join(result)
     except Exception as e:
         return f"Error fetching positions: {e}"
+
+def get_tickers(status: str = "active", asset_class: str = "us_equity", limit: int = 100, search: str = None) -> str:
+    """
+    Returns a list of available tickers/symbols from Alpaca.
+    
+    Args:
+        status: 'active' or 'inactive'.
+        asset_class: 'us_equity' or 'crypto'.
+        limit: Maximum number of symbols to return (default 100).
+        search: Optional string to filter symbols (case-insensitive).
+    """
+    try:
+        client = _get_trading_client()
+        
+        status_enum = AssetStatus.ACTIVE if status.lower() == "active" else AssetStatus.INACTIVE
+        asset_class_enum = AssetClass.US_EQUITY if asset_class.lower() == "us_equity" else AssetClass.CRYPTO
+        
+        search_params = GetAssetsRequest(status=status_enum, asset_class=asset_class_enum)
+        assets = client.get_all_assets(search_params)
+        
+        # Filter tradable assets
+        tradable_assets = [asset for asset in assets if asset.tradable]
+        
+        if search:
+            search_query = search.upper()
+            tradable_assets = [asset for asset in tradable_assets if search_query in asset.symbol]
+            
+        total_count = len(tradable_assets)
+        symbols = [asset.symbol for asset in tradable_assets[:limit]]
+        
+        result = f"Found {total_count} tradable {asset_class} symbols (status: {status})."
+        if search:
+            result += f" Filtered by search: '{search}'."
+            
+        if symbols:
+            result += f"\nSymbols (showing first {len(symbols)}):\n" + ", ".join(symbols)
+        else:
+            result += "\nNo matching symbols found."
+            
+        return result
+    except Exception as e:
+        return f"Error fetching tickers: {e}"
 
 def place_order(symbol: str, qty: float, side: str, order_type: str = "market", time_in_force: str = "gtc", limit_price: float = None) -> str:
     """

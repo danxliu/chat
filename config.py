@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     model: str = "local-model"
     max_tokens: int = 8192
     temperature: float = 0.1
+    timeout: float = 600.0
     step_threshold: int = 15
     alpaca_key: str = "alpaca-key"
     alpaca_secret: str = "alpaca-secret"
