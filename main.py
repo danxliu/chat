@@ -4,15 +4,9 @@ from agent import InfiniteAgentWorkflow
 
 
 async def main():
-    print("Initializing Agent Workflow...")
     workflow = InfiniteAgentWorkflow(timeout=3600.0)
-
-    query = input("Enter prompt...")
-    print(f"\nSending Query: '{query}'")
-
+    query = input("Enter prompt: ")
     response = await workflow.run(query=query)
-
-    print("\nFinal Response:")
     print(str(response))
 
 

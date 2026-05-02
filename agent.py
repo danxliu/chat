@@ -1,6 +1,7 @@
 import os
 import tempfile
 import uuid
+from datetime import datetime
 from typing import List
 
 import yaml
@@ -23,6 +24,7 @@ from tools.web_search import web_search
 from tools.web_scrape import web_scrape
 from tools.finance import get_stock_data, get_stock_history
 from tools.execute_python import execute_python
+from tools.ask_user import ask_user
 
 
 class LoopEvent(Event):
@@ -72,7 +74,8 @@ class InfiniteAgentWorkflow(Workflow):
             query=query,
             step_threshold=settings.step_threshold,
             work_dir=os.getcwd(),
-            current_pid=os.getpid()
+            current_pid=os.getpid(),
+            current_date=datetime.now().strftime("%A, %B %d, %Y")
         )
         
         await ctx.set("continuation_number", 0)
@@ -91,6 +94,7 @@ class InfiniteAgentWorkflow(Workflow):
         get_stock_data_tool = FunctionTool.from_defaults(fn=get_stock_data)
         get_stock_history_tool = FunctionTool.from_defaults(fn=get_stock_history)
         execute_python_tool = FunctionTool.from_defaults(fn=execute_python)
+        ask_user_tool = FunctionTool.from_defaults(fn=ask_user)
 
         agent = create_agent(llm, tools=[
             finish_tool,
@@ -98,7 +102,8 @@ class InfiniteAgentWorkflow(Workflow):
             web_scrape_tool,
             get_stock_data_tool,
             get_stock_history_tool,
-            execute_python_tool
+            execute_python_tool,
+            ask_user_tool
         ])
 
         response = await agent.achat(query)
@@ -115,7 +120,8 @@ class InfiniteAgentWorkflow(Workflow):
             prompt = RichPromptTemplate(RESUMING_PROMPT_TEMPLATE)
             next_query = prompt.format(
                 progress_text=summary,
-                continuation_number=continuation_number
+                continuation_number=continuation_number,
+                current_date=datetime.now().strftime("%A, %B %d, %Y")
             )
             
             await ctx.set("continue_task", False)
@@ -132,11 +138,13 @@ def get_agent() -> AgentRunner:
     get_stock_data_tool = FunctionTool.from_defaults(fn=get_stock_data)
     get_stock_history_tool = FunctionTool.from_defaults(fn=get_stock_history)
     execute_python_tool = FunctionTool.from_defaults(fn=execute_python)
+    ask_user_tool = FunctionTool.from_defaults(fn=ask_user)
 
     return create_agent(llm, tools=[
         web_search_tool,
         web_scrape_tool,
         get_stock_data_tool,
         get_stock_history_tool,
-        execute_python_tool
+        execute_python_tool,
+        ask_user_tool
     ])
