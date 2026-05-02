@@ -25,6 +25,7 @@ from tools.web_scrape import web_scrape
 from tools.finance import get_stock_data, get_stock_history
 from tools.execute_python import execute_python
 from tools.ask_user import ask_user
+from tools.trading import get_account_info, get_positions, place_order
 
 
 class LoopEvent(Event):
@@ -95,6 +96,9 @@ class InfiniteAgentWorkflow(Workflow):
         get_stock_history_tool = FunctionTool.from_defaults(fn=get_stock_history)
         execute_python_tool = FunctionTool.from_defaults(fn=execute_python)
         ask_user_tool = FunctionTool.from_defaults(fn=ask_user)
+        get_account_info_tool = FunctionTool.from_defaults(fn=get_account_info)
+        get_positions_tool = FunctionTool.from_defaults(fn=get_positions)
+        place_order_tool = FunctionTool.from_defaults(fn=place_order)
 
         agent = create_agent(llm, tools=[
             finish_tool,
@@ -103,7 +107,10 @@ class InfiniteAgentWorkflow(Workflow):
             get_stock_data_tool,
             get_stock_history_tool,
             execute_python_tool,
-            ask_user_tool
+            ask_user_tool,
+            get_account_info_tool,
+            get_positions_tool,
+            place_order_tool
         ])
 
         response = await agent.achat(query)
@@ -139,6 +146,9 @@ def get_agent() -> AgentRunner:
     get_stock_history_tool = FunctionTool.from_defaults(fn=get_stock_history)
     execute_python_tool = FunctionTool.from_defaults(fn=execute_python)
     ask_user_tool = FunctionTool.from_defaults(fn=ask_user)
+    get_account_info_tool = FunctionTool.from_defaults(fn=get_account_info)
+    get_positions_tool = FunctionTool.from_defaults(fn=get_positions)
+    place_order_tool = FunctionTool.from_defaults(fn=place_order)
 
     return create_agent(llm, tools=[
         web_search_tool,
@@ -146,5 +156,8 @@ def get_agent() -> AgentRunner:
         get_stock_data_tool,
         get_stock_history_tool,
         execute_python_tool,
-        ask_user_tool
+        ask_user_tool,
+        get_account_info_tool,
+        get_positions_tool,
+        place_order_tool
     ])
