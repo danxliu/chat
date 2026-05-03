@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List
 
 import yaml
-from llama_index.core.agent import AgentRunner, FunctionCallingAgentWorker
+from llama_index.core.agent import AgentRunner
 from llama_index.core.tools import FunctionTool
 from llama_index.core.workflow import (
     Context,
@@ -15,7 +15,6 @@ from llama_index.core.workflow import (
     Workflow,
     step,
 )
-from llama_index.llms.openai_like import OpenAILike
 
 from config import settings
 from prompts import STARTING_PROMPT_TEMPLATE, RESUMING_PROMPT_TEMPLATE, RichPromptTemplate
@@ -26,30 +25,38 @@ from tools.finance import get_stock_data, get_stock_history
 from tools.execute_python import execute_python
 from tools.ask_user import ask_user
 from tools.trading import get_account_info, get_positions, place_order, get_tickers
-
+from tools.subagent import call_subagent
+from agent_factory import get_llm, create_agent
 
 class LoopEvent(Event):
     query: str
 
 
-def get_llm() -> OpenAILike:
-    """Configures the LLM to connect to the local OpenAI-compatible endpoint."""
-    return OpenAILike(
-        api_base=settings.api_base,
-        api_key=settings.api_key,
-        model=settings.model,
-        is_function_calling_model=True,
-        is_chat_model=True,
-        temperature=settings.temperature,
-        max_tokens=settings.max_tokens,
-        timeout=settings.timeout,
-    )
-
-
-def create_agent(llm: OpenAILike, tools: List[FunctionTool]) -> AgentRunner:
-    """Creates the agent worker and wraps it in a runner loop."""
-    agent_worker = FunctionCallingAgentWorker.from_tools(tools, llm=llm, verbose=True)
-    return AgentRunner(agent_worker)
+def get_tools(ctx: Context = None, session_id: str = None, include_subagent: bool = True) -> List[FunctionTool]:
+    """Returns the list of tools available to the agent."""
+    tools = [
+        FunctionTool.from_defaults(fn=web_search),
+        FunctionTool.from_defaults(async_fn=web_scrape),
+        FunctionTool.from_defaults(fn=get_stock_data),
+        FunctionTool.from_defaults(fn=get_stock_history),
+        FunctionTool.from_defaults(fn=execute_python),
+        FunctionTool.from_defaults(fn=ask_user),
+        FunctionTool.from_defaults(fn=get_account_info),
+        FunctionTool.from_defaults(fn=get_positions),
+        FunctionTool.from_defaults(fn=place_order),
+        FunctionTool.from_defaults(fn=get_tickers),
+    ]
+    
+    if ctx and session_id:
+        tools.append(get_finish_tool(ctx, session_id))
+        
+    if include_subagent:
+        # We pass include_subagent=False to the subagent to avoid infinite recursion by default
+        # or we could just let it be and rely on the LLM to not be stupid.
+        # For now, let's allow it but be mindful.
+        tools.append(FunctionTool.from_defaults(async_fn=call_subagent))
+        
+    return tools
 
 
 def _get_session_state(session_id: str) -> dict:
@@ -89,32 +96,9 @@ class InfiniteAgentWorkflow(Workflow):
         session_id = await ctx.get("session_id")
 
         llm = get_llm()
-        finish_tool = get_finish_tool(ctx, session_id)
+        tools = get_tools(ctx, session_id)
         
-        web_search_tool = FunctionTool.from_defaults(fn=web_search)
-        web_scrape_tool = FunctionTool.from_defaults(fn=web_scrape)
-        get_stock_data_tool = FunctionTool.from_defaults(fn=get_stock_data)
-        get_stock_history_tool = FunctionTool.from_defaults(fn=get_stock_history)
-        execute_python_tool = FunctionTool.from_defaults(fn=execute_python)
-        ask_user_tool = FunctionTool.from_defaults(fn=ask_user)
-        get_account_info_tool = FunctionTool.from_defaults(fn=get_account_info)
-        get_positions_tool = FunctionTool.from_defaults(fn=get_positions)
-        place_order_tool = FunctionTool.from_defaults(fn=place_order)
-        get_tickers_tool = FunctionTool.from_defaults(fn=get_tickers)
-
-        agent = create_agent(llm, tools=[
-            finish_tool,
-            web_search_tool,
-            web_scrape_tool,
-            get_stock_data_tool,
-            get_stock_history_tool,
-            execute_python_tool,
-            ask_user_tool,
-            get_account_info_tool,
-            get_positions_tool,
-            place_order_tool,
-            get_tickers_tool
-        ])
+        agent = create_agent(llm, tools=tools)
 
         response = await agent.achat(query)
 
@@ -142,27 +126,5 @@ class InfiniteAgentWorkflow(Workflow):
 def get_agent() -> AgentRunner:
     """Convenience function to initialize and return the fully configured agent."""
     llm = get_llm()
-    
-    web_search_tool = FunctionTool.from_defaults(fn=web_search)
-    web_scrape_tool = FunctionTool.from_defaults(fn=web_scrape)
-    get_stock_data_tool = FunctionTool.from_defaults(fn=get_stock_data)
-    get_stock_history_tool = FunctionTool.from_defaults(fn=get_stock_history)
-    execute_python_tool = FunctionTool.from_defaults(fn=execute_python)
-    ask_user_tool = FunctionTool.from_defaults(fn=ask_user)
-    get_account_info_tool = FunctionTool.from_defaults(fn=get_account_info)
-    get_positions_tool = FunctionTool.from_defaults(fn=get_positions)
-    place_order_tool = FunctionTool.from_defaults(fn=place_order)
-    get_tickers_tool = FunctionTool.from_defaults(fn=get_tickers)
-
-    return create_agent(llm, tools=[
-        web_search_tool,
-        web_scrape_tool,
-        get_stock_data_tool,
-        get_stock_history_tool,
-        execute_python_tool,
-        ask_user_tool,
-        get_account_info_tool,
-        get_positions_tool,
-        place_order_tool,
-        get_tickers_tool
-    ])
+    tools = get_tools()
+    return create_agent(llm, tools=tools)
