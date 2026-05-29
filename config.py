@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     temperature: float = 0.1
     timeout: float = 600.0
     step_threshold: int = 15
+    redis_host: str = "127.0.0.1"
+    redis_port: int = 6379
 
 
 settings = Settings()

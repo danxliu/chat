@@ -14,4 +14,6 @@
 
   # https://devenv.sh/packages/
   packages = [ pkgs.git ];
+
+  services.redis.enable = true;
 }
