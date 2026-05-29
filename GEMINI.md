@@ -17,12 +17,13 @@ This is a Python-based AI agent application named `agent`. It leverages the `lla
 ## Building and Running
 
 ### Prerequisites
-- [uv](https://github.com/astral-sh/uv) installed on your system.
+- [devenv](https://devenv.sh/getting-started/) installed on your system.
 - A local OpenAI-compatible LLM server running (default expects `http://localhost:13305/v1`).
 
-### Installation
+### Installation & Environment
+Enter the development shell. This will automatically sync dependencies using `uv`.
 ```bash
-uv sync
+devenv shell
 ```
 
 ### Configuration
@@ -36,6 +37,7 @@ TEMPERATURE=0.1
 ```
 
 ### Running the Agent
+Inside the `devenv shell`:
 ```bash
 uv run main.py
 ```
