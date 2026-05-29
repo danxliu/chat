@@ -6,14 +6,16 @@ aiohttp==3.13.5
     # via llama-index-core
 aiosignal==1.4.0
     # via aiohttp
-alpaca-py==0.43.4
-    # via agent (pyproject.toml)
+annotated-doc==0.0.4
+    # via fastapi
 annotated-types==0.7.0
     # via pydantic
 anyio==4.13.0
     # via
     #   httpx
     #   openai
+    #   starlette
+    #   watchfiles
 attrs==26.1.0
     # via aiohttp
 babel==2.18.0
@@ -38,6 +40,7 @@ click==8.3.3
     # via
     #   ddgs
     #   nltk
+    #   uvicorn
 courlan==1.3.2
     # via trafilatura
 cuda-bindings==13.2.0
@@ -62,6 +65,8 @@ distro==1.9.0
     # via openai
 docker==7.1.0
     # via agent (pyproject.toml)
+fastapi==0.136.3
+    # via agent (pyproject.toml)
 filelock==3.29.0
     # via
     #   huggingface-hub
@@ -83,13 +88,17 @@ fsspec==2026.4.0
 greenlet==3.5.0
     # via sqlalchemy
 h11==0.16.0
-    # via httpcore
+    # via
+    #   httpcore
+    #   uvicorn
 hf-xet==1.4.3
     # via huggingface-hub
 htmldate==1.9.4
     # via trafilatura
 httpcore==1.0.9
     # via httpx
+httptools==0.8.0
+    # via uvicorn
 httpx==0.28.1
     # via
     #   llama-index-core
@@ -142,8 +151,6 @@ mdurl==0.1.2
     # via markdown-it-py
 mpmath==1.3.0
     # via sympy
-msgpack==1.1.2
-    # via alpaca-py
 multidict==6.7.1
     # via
     #   aiohttp
@@ -213,9 +220,7 @@ packaging==26.2
     #   marshmallow
     #   transformers
 pandas==3.0.2
-    # via
-    #   alpaca-py
-    #   yfinance
+    # via yfinance
 peewee==4.0.5
     # via yfinance
 pillow==12.2.0
@@ -235,7 +240,7 @@ pycparser==3.0
 pydantic==2.13.3
     # via
     #   agent (pyproject.toml)
-    #   alpaca-py
+    #   fastapi
     #   llama-index-core
     #   openai
     #   pydantic-settings
@@ -251,10 +256,11 @@ python-dateutil==2.9.0.post0
     #   htmldate
     #   pandas
 python-dotenv==1.2.2
-    # via pydantic-settings
+    # via
+    #   pydantic-settings
+    #   uvicorn
 pytz==2026.1.post1
     # via
-    #   alpaca-py
     #   dateparser
     #   yfinance
 pyyaml==6.0.3
@@ -262,6 +268,7 @@ pyyaml==6.0.3
     #   huggingface-hub
     #   llama-index-core
     #   transformers
+    #   uvicorn
 regex==2026.4.4
     # via
     #   dateparser
@@ -270,7 +277,6 @@ regex==2026.4.4
     #   transformers
 requests==2.33.1
     # via
-    #   alpaca-py
     #   docker
     #   huggingface-hub
     #   llama-index-core
@@ -291,8 +297,8 @@ soupsieve==2.8.3
     # via beautifulsoup4
 sqlalchemy==2.0.49
     # via llama-index-core
-sseclient-py==1.9.0
-    # via alpaca-py
+starlette==1.2.0
+    # via fastapi
 sympy==1.14.0
     # via torch
 tabulate==0.10.0
@@ -325,12 +331,14 @@ typing-extensions==4.15.0
     #   aiosignal
     #   anyio
     #   beautifulsoup4
+    #   fastapi
     #   huggingface-hub
     #   llama-index-core
     #   openai
     #   pydantic
     #   pydantic-core
     #   sqlalchemy
+    #   starlette
     #   torch
     #   typing-inspect
     #   typing-inspection
@@ -340,6 +348,7 @@ typing-inspect==0.9.0
     #   llama-index-core
 typing-inspection==0.4.2
     # via
+    #   fastapi
     #   pydantic
     #   pydantic-settings
 tzlocal==5.3.1
@@ -351,9 +360,16 @@ urllib3==2.6.3
     #   htmldate
     #   requests
     #   trafilatura
+uvicorn==0.48.0
+    # via agent (pyproject.toml)
+uvloop==0.22.1
+    # via uvicorn
+watchfiles==1.2.0
+    # via uvicorn
 websockets==16.0
     # via
-    #   alpaca-py
+    #   agent (pyproject.toml)
+    #   uvicorn
     #   yfinance
 wrapt==2.1.2
     # via

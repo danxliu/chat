@@ -13,9 +13,6 @@ class Settings(BaseSettings):
     temperature: float = 0.1
     timeout: float = 600.0
     step_threshold: int = 15
-    alpaca_key: str = "alpaca-key"
-    alpaca_secret: str = "alpaca-secret"
-    alpaca_endpoint: str=""
 
 
 settings = Settings()

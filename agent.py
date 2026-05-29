@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List
 
 import yaml
-from llama_index.core.agent import AgentRunner
+from llama_index.core.agent import ReActAgent
 from llama_index.core.tools import FunctionTool
 from llama_index.core.workflow import (
     Context,
@@ -24,7 +24,6 @@ from tools.web_scrape import web_scrape
 from tools.finance import get_stock_data, get_stock_history
 from tools.execute_python import execute_python
 from tools.ask_user import ask_user
-from tools.trading import get_account_info, get_positions, place_order, get_tickers
 from tools.subagent import call_subagent
 from agent_factory import get_llm, create_agent
 
@@ -41,10 +40,6 @@ def get_tools(ctx: Context = None, session_id: str = None, include_subagent: boo
         FunctionTool.from_defaults(fn=get_stock_history),
         FunctionTool.from_defaults(fn=execute_python),
         FunctionTool.from_defaults(fn=ask_user),
-        FunctionTool.from_defaults(fn=get_account_info),
-        FunctionTool.from_defaults(fn=get_positions),
-        FunctionTool.from_defaults(fn=place_order),
-        FunctionTool.from_defaults(fn=get_tickers),
     ]
     
     if ctx and session_id:
@@ -123,7 +118,7 @@ class InfiniteAgentWorkflow(Workflow):
         return StopEvent(result=str(response))
 
 
-def get_agent() -> AgentRunner:
+def get_agent() -> ReActAgent:
     """Convenience function to initialize and return the fully configured agent."""
     llm = get_llm()
     tools = get_tools()

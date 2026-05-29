@@ -1,5 +1,5 @@
 from typing import List
-from llama_index.core.agent import AgentRunner, FunctionCallingAgentWorker
+from llama_index.core.agent import ReActAgent
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai_like import OpenAILike
 from config import settings
@@ -17,7 +17,6 @@ def get_llm() -> OpenAILike:
         timeout=settings.timeout,
     )
 
-def create_agent(llm: OpenAILike, tools: List[FunctionTool]) -> AgentRunner:
-    """Creates the agent worker and wraps it in a runner loop."""
-    agent_worker = FunctionCallingAgentWorker.from_tools(tools, llm=llm, verbose=True)
-    return AgentRunner(agent_worker)
+def create_agent(llm: OpenAILike, tools: List[FunctionTool]) -> ReActAgent:
+    """Creates the ReAct agent."""
+    return ReActAgent.from_tools(tools, llm=llm, verbose=True)
