@@ -4,14 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Agent Chat</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <h1>AI Agent Chat</h1>
-    <div id="chat-container" style="height: 400px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;">
-        <div id="messages"></div>
+    <div id="sidebar">
+        <button id="new-chat">New Chat</button>
+        <h3>Recent Chats</h3>
+        <ul id="chat-list"></ul>
     </div>
-    <input type="text" id="user-input" placeholder="Type your message here..." style="width: 80%;">
-    <button id="send-button">Send</button>
+    <div id="main-chat">
+        <h1>AI Agent Chat</h1>
+        <div id="chat-container">
+            <div id="messages"></div>
+        </div>
+        <div id="input-area">
+            <input type="text" id="user-input" placeholder="Type your message here...">
+            <button id="send-button">Send</button>
+        </div>
+    </div>
 
     <script src="/static/app.js"></script>
 </body>

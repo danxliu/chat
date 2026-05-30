@@ -32,5 +32,13 @@ class ChatStorage:
         ctx_dict = json.loads(data)
         return Context.from_dict(workflow, ctx_dict, serializer=self.serializer)
 
+    async def list_sessions(self) -> list[str]:
+        keys = await self.client.keys("agent_context:*")
+        return [key.split(":")[-1] for key in keys]
+
+    async def delete_context(self, session_id: str) -> None:
+        """Deletes the session context from Redis."""
+        await self.client.delete(self._get_key(session_id))
+
 
 chat_storage = ChatStorage()
