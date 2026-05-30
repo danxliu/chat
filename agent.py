@@ -19,7 +19,7 @@ def get_tools(
     """Returns the list of tools available to the agent."""
     tools = [
         FunctionTool.from_defaults(fn=web_search),
-        FunctionTool.from_defaults(async_fn=web_scrape),
+        FunctionTool.from_defaults(async_fn=web_scrape, return_direct=True),
         FunctionTool.from_defaults(fn=get_stock_data),
         FunctionTool.from_defaults(fn=get_stock_history),
         FunctionTool.from_defaults(fn=execute_python),

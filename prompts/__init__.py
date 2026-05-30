@@ -2,7 +2,6 @@ import jinja2
 from .starting import STARTING_PROMPT_TEMPLATE, IMPORTANT_INSTRUCTIONS
 from .resuming import RESUMING_PROMPT_TEMPLATE
 from .summarizer import SUMMARIZER_PROMPT_TEMPLATE
-from .web_summarizer import WEB_SUMMARIZER_PROMPT
 
 class RichPromptTemplate:
     """A simple compatibility layer for RichPromptTemplate using Jinja2."""
@@ -17,6 +16,5 @@ __all__ = [
     "IMPORTANT_INSTRUCTIONS",
     "RESUMING_PROMPT_TEMPLATE", 
     "SUMMARIZER_PROMPT_TEMPLATE",
-    "WEB_SUMMARIZER_PROMPT",
     "RichPromptTemplate"
 ]
