@@ -9,9 +9,8 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from llama_index.core.workflow import Context
 
-from workflow import InfiniteAgentWorkflow, ThoughtEvent, ToolCallEvent
+from workflow import AgentExecutor, ThoughtEvent, ToolCallEvent
 from storage import chat_storage
 
 app = FastAPI()
@@ -38,39 +37,27 @@ async def get_index():
 @app.post("/api/chats")
 async def create_chat():
     session_id = str(uuid.uuid4())
-    workflow = InfiniteAgentWorkflow(timeout=3600.0)
-    ctx = Context(workflow)
-    await ctx.set("session_id", session_id)
-    await chat_storage.save_context(session_id, ctx)
+    # State is initialized on first use in AgentExecutor, or we can save an empty one
+    await chat_storage.save_context(session_id, {
+        "chat_history": [],
+        "metadata": {"session_id": session_id},
+        "continuation_number": 0,
+        "continue_task": False,
+        "session_summary": ""
+    })
     return {"session_id": session_id}
 
 
 @app.get("/api/chats")
 async def list_chats():
-    sessions = await chat_storage.list_sessions()
+    sessions = await chat_storage.list_sessions_with_titles()
     return {"sessions": sessions}
 
 
 @app.get("/api/chats/{session_id}/history")
 async def get_chat_history(session_id: str):
-    workflow = InfiniteAgentWorkflow(timeout=3600.0)
-    ctx = await chat_storage.load_context(session_id, workflow)
-    if not ctx:
-        return {"history": []}
-
-    history_dicts = await ctx.get("chat_history", default=[])
-    history = []
-    for msg in history_dicts:
-        role = msg.get("role")
-        role_str = role.value if hasattr(role, "value") else str(role)
-        if "MessageRole." in role_str:
-            role_str = role_str.split(".")[-1].lower()
-        
-        history.append({
-            "role": role_str,
-            "content": msg.get("content")
-        })
-
+    executor = AgentExecutor(session_id)
+    history = await executor.get_history()
     return {"history": history}
 
 
@@ -80,40 +67,31 @@ async def delete_chat(session_id: str):
     return {"status": "success"}
 
 
-@app.get("/api/chats/clear") # Legacy or for manual browser call
-async def clear_chats_get():
-    await chat_storage.clear_all()
-    return {"status": "success"}
-
-
 @app.delete("/api/chats")
 async def clear_all_chats():
     await chat_storage.clear_all()
     return {"status": "success"}
 
 
-async def handle_message(payload: Dict[str, Any], websocket: WebSocket, workflow: InfiniteAgentWorkflow, cancel_events: Dict[str, asyncio.Event]):
+async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_events: Dict[str, asyncio.Event]):
     session_id = payload.get("session_id")
     user_msg = payload.get("content")
     
     if not session_id or not user_msg:
         return
         
-    ctx = await chat_storage.load_context(session_id, workflow)
-    if not ctx:
-        await websocket.send_json({"type": MessageType.ERROR, "message": "Session not found."})
-        return
-
+    executor = AgentExecutor(session_id)
+    
     # Setup cancellation event for this session
     if session_id not in cancel_events:
         cancel_events[session_id] = asyncio.Event()
     cancel_events[session_id].clear()
     
     try:
-        # Capture the workflow handler to stream events
-        handler = workflow.run(query=user_msg, ctx=ctx)
+        handler = executor.run(query=user_msg)
         
-        async for event in handler.stream_events():
+        final_response = ""
+        async for event in handler:
             if isinstance(event, ThoughtEvent):
                 await websocket.send_json({
                     "type": MessageType.THINKING,
@@ -130,15 +108,17 @@ async def handle_message(payload: Dict[str, Any], websocket: WebSocket, workflow
                         "args": event.tool_kwargs
                     }
                 })
+            elif isinstance(event, str):
+                final_response = event
         
-        response = await handler
-        await chat_storage.save_context(session_id, ctx)
         await websocket.send_json({
             "type": MessageType.MESSAGE,
             "session_id": session_id,
-            "content": str(response)
+            "content": final_response
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         await websocket.send_json({"type": MessageType.ERROR, "session_id": session_id, "message": str(e)})
 
 
@@ -157,7 +137,6 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("Persistent WebSocket connection established")
 
-    workflow = InfiniteAgentWorkflow(timeout=3600.0)
     cancel_events: Dict[str, asyncio.Event] = {}
 
     dispatcher: Dict[MessageType, Callable[..., Awaitable[None]]] = {
@@ -166,6 +145,21 @@ async def websocket_endpoint(websocket: WebSocket):
         MessageType.CANCEL: handle_cancel,
     }
 
+    async def run_handler(h: Callable[..., Awaitable[None]], **kwargs):
+        try:
+            await h(**kwargs)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            try:
+                await websocket.send_json({
+                    "type": MessageType.ERROR,
+                    "session_id": kwargs.get("payload", {}).get("session_id"),
+                    "message": f"Handler error: {str(e)}"
+                })
+            except:
+                pass
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -173,8 +167,8 @@ async def websocket_endpoint(websocket: WebSocket):
             handler = dispatcher.get(msg_type)
             
             if handler:
-                # Run handler as a task to allow concurrent processing (multiple sessions or heartbeats)
-                asyncio.create_task(handler(payload=data, websocket=websocket, workflow=workflow, cancel_events=cancel_events))
+                # Run handler as a task to allow concurrent processing
+                asyncio.create_task(run_handler(handler, payload=data, websocket=websocket, cancel_events=cancel_events))
             else:
                 print(f"Unknown message type: {msg_type}")
                 await websocket.send_json({"type": MessageType.ERROR, "message": f"Unknown message type: {msg_type}"})

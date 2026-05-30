@@ -1,11 +1,13 @@
 # GEMINI.md
 
 ## Project Overview
-This is a Python-based AI agent application named `agent`. It leverages the `llama-index` framework to create a functional agent capable of interacting with an OpenAI-compatible local LLM endpoint. The project uses `pydantic-settings` for robust configuration management via environment variables.
+This is a Python-based AI agent application named `agent`. It leverages the `LiteLLM` library for universal LLM interactions and tool calling. The project uses `pydantic-settings` for robust configuration management via environment variables.
 
 ### Main Technologies
 - **Python**: Core programming language (>=3.11).
-- **LlamaIndex**: Framework for building LLM applications (agent orchestration, LLM integration).
+- **LiteLLM**: Framework for interacting with multiple LLM providers using a unified OpenAI-compatible API.
+- **FastAPI**: Web framework for the API and WebSocket communication.
+- **Redis**: For persistent session state and chat history storage.
 - **Pydantic / Pydantic Settings**: Data validation and configuration management.
 - **uv**: Fast Python package installer and resolver.
 - **Frontend**:
@@ -16,8 +18,11 @@ This is a Python-based AI agent application named `agent`. It leverages the `lla
     - **Material Symbols**: UI icons.
 
 ### Architecture
-- `main.py`: The entry point that initializes and executes the agent.
-- `agent.py`: Contains the logic for setting up the LLM (`OpenAILike`) and creating the `AgentRunner` with a `FunctionCallingAgentWorker`.
+- `main.py`: The entry point that initializes the FastAPI app and handles WebSockets.
+- `workflow.py`: Contains the `AgentExecutor` class, which manages the LLM chat loop, sequential tool calling, and session state.
+- `agent.py`: Returns the list of available tool functions.
+- `agent_factory.py`: Provides default completion arguments for LiteLLM.
+- `storage.py`: Manages Redis-based storage for session context and titles using raw JSON.
 - `config.py`: Defines the `Settings` model using Pydantic, loading configuration from a `.env` file.
 
 ## Building and Running

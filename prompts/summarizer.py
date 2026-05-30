@@ -8,3 +8,11 @@ The trajectory of the agent is stored in the file: {{ trajectory_file }}
 - Return a precise chronologically-ordered list of things the agent did
   with the reason for doing that along with relevant code snippets
 """
+
+TITLE_SUMMARIZER_PROMPT_TEMPLATE = """
+Summarize the following user query into a concise, catchy chat title.
+The title should be between 3 to 5 words long.
+Do not use quotes or any introductory text. Just return the title itself.
+
+User Query: {query}
+"""

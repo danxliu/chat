@@ -1,253 +1,241 @@
 import asyncio
+import json
 import os
-import uuid
 from datetime import datetime
-from typing import List, Optional, cast
+from typing import Any, AsyncGenerator, Dict, List
 
-from llama_index.core.agent.function_calling.step import (
-    build_error_tool_output,
-    build_missing_tool_message,
-)
-from llama_index.core.base.llms.types import ChatMessage, MessageRole
-from llama_index.core.llms.llm import ToolSelection
-from llama_index.core.tools.types import BaseTool, ToolOutput
-from llama_index.core.tools.calling import acall_tool_with_selection
-from llama_index.core.workflow import (
-    Context,
-    Event,
-    StartEvent,
-    StopEvent,
-    Workflow,
-    step,
-)
+import litellm
+from pydantic import BaseModel
 
 from agent import get_tools
-from agent_factory import get_llm
+from agent_factory import get_completion_args
 from config import settings
 from prompts import (
     RESUMING_PROMPT_TEMPLATE,
     STARTING_PROMPT_TEMPLATE,
+    TITLE_SUMMARIZER_PROMPT_TEMPLATE,
     RichPromptTemplate,
 )
+from storage import chat_storage
 
-MAX_FUNCTION_CALLS = 5
-ALLOW_PARALLEL_TOOL_CALLS = True
-
-
-class LoopEvent(Event):
-    query: str
+MAX_FUNCTION_CALLS = 10
 
 
-class ThoughtEvent(Event):
+class ThoughtEvent(BaseModel):
     thought: str
 
 
-class ToolCallEvent(Event):
+class ToolCallEvent(BaseModel):
     tool_name: str
     tool_kwargs: dict
 
 
-def _extract_thinking_delta(chunk: object) -> Optional[str]:
-    raw = getattr(chunk, "raw", None)
-    choices = getattr(raw, "choices", None) if raw else None
-    if choices:
-        delta = getattr(choices[0], "delta", None)
-        reasoning = getattr(delta, "reasoning", None) if delta else None
-        if reasoning:
-            return reasoning
-        content = getattr(delta, "content", None) if delta else None
-        if content:
-            return content
-
-    delta = getattr(chunk, "delta", None)
-    return delta if delta else None
-
-
-def _build_missing_tool_output(tool_call: ToolSelection) -> ToolOutput:
-    message = build_missing_tool_message(tool_call.tool_name)
-    return build_error_tool_output(tool_call.tool_name, tool_call.tool_kwargs, message)
-
-
-async def _call_tools(
-    tool_calls: List[ToolSelection],
-    tools: List[BaseTool],
-) -> List[ToolOutput]:
-    tools_by_name = {tool.metadata.name: tool for tool in tools}
-    results: List[Optional[ToolOutput]] = [None] * len(tool_calls)
-    tasks: List[asyncio.Task[ToolOutput]] = []
-    task_indexes: List[int] = []
-
-    for index, tool_call in enumerate(tool_calls):
-        tool = tools_by_name.get(tool_call.tool_name)
-        if tool is None:
-            results[index] = _build_missing_tool_output(tool_call)
-            continue
-
-        if ALLOW_PARALLEL_TOOL_CALLS:
-            task_indexes.append(index)
-            tasks.append(
-                asyncio.create_task(
-                    acall_tool_with_selection(tool_call, tools, verbose=False)
-                )
-            )
-        else:
-            results[index] = await acall_tool_with_selection(
-                tool_call, tools, verbose=False
-            )
-
-    if tasks:
-        outputs = await asyncio.gather(*tasks)
-        for index, output in zip(task_indexes, outputs):
-            results[index] = output
-
-    if any(output is None for output in results):
-        raise RuntimeError("Tool execution did not return outputs for all tool calls.")
-
-    return cast(List[ToolOutput], results)
-
-
-class InfiniteAgentWorkflow(Workflow):
-    @step
-    async def start(self, ctx: Context, ev: StartEvent) -> LoopEvent:
-        query = ev.get("query")
-        session_id = await ctx.get("session_id", default=None)
-        if not session_id:
-            session_id = str(uuid.uuid4())
-            await ctx.set("session_id", session_id)
-
-        # Store the original user query for later history update
-        await ctx.set("current_user_query", query)
-
-        prompt = RichPromptTemplate(STARTING_PROMPT_TEMPLATE)
-        formatted_query = prompt.format(
-            query=query,
-            step_threshold=settings.step_threshold,
-            work_dir=os.getcwd(),
-            current_pid=os.getpid(),
-            current_date=datetime.now().strftime("%A, %B %d, %Y"),
-        )
-
-        await ctx.set("continuation_number", 0)
-        return LoopEvent(query=formatted_query)
-
-    @step
-    async def loop(self, ctx: Context, ev: LoopEvent) -> StopEvent | LoopEvent:
-        query = ev.query
-        session_id = await ctx.get("session_id")
-
-        llm = get_llm()
-        tools = get_tools(ctx, session_id)
-
-        history_dicts = await ctx.get("chat_history", default=[])
-        chat_history = [
-            ChatMessage(role=d["role"], content=d["content"]) for d in history_dicts
+class AgentExecutor:
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        self.state: Dict[str, Any] = {}
+        self.tools = get_tools()
+        self.tool_map = {tool.__name__: tool for tool in self.tools}
+        self.litellm_tools = [
+            {"type": "function", "function": litellm.utils.function_to_dict(tool)}
+            for tool in self.tools
         ]
 
-        messages = list(chat_history)
-        user_msg: Optional[str] = query
-        response_message: Optional[ChatMessage] = None
-        function_calls = 0
+    async def _load_state(self):
+        self.state = await chat_storage.load_context(self.session_id)
+        if not self.state:
+            self.state = {
+                "chat_history": [],
+                "metadata": {"session_id": self.session_id},
+                "continuation_number": 0,
+                "continue_task": False,
+                "session_summary": "",
+            }
 
-        while True:
-            stream = await llm.astream_chat_with_tools(
-                tools=tools,
-                user_msg=user_msg,
-                chat_history=messages,
-                verbose=False,
-                allow_parallel_tool_calls=ALLOW_PARALLEL_TOOL_CALLS,
-            )
+    async def _save_state(self):
+        await chat_storage.save_context(self.session_id, self.state)
 
-            last_response = None
-            async for chunk in stream:
-                last_response = chunk
-                thinking_delta = _extract_thinking_delta(chunk)
-                if thinking_delta:
-                    ctx.write_event_to_stream(ThoughtEvent(thought=thinking_delta))
-
-            if last_response is None:
-                response_message = ChatMessage(
-                    role=MessageRole.ASSISTANT,
-                    content="",
+    async def _generate_title(self, query: str):
+        existing_title = await chat_storage.get_title(self.session_id)
+        if not existing_title:
+            try:
+                title_prompt = TITLE_SUMMARIZER_PROMPT_TEMPLATE.format(query=query)
+                completion_args = get_completion_args()
+                response = await litellm.acompletion(
+                    **completion_args,
+                    messages=[{"role": "user", "content": title_prompt}],
                 )
-                break
+                title = response.choices[0].message.content.strip().replace('"', "")
+                await chat_storage.save_title(self.session_id, title)
+            except Exception as e:
+                print(f"Failed to generate title for session {self.session_id}: {e}")
 
-            response_message = last_response.message
-            messages.append(response_message)
+    async def run(self, query: str) -> AsyncGenerator[Any, None]:
+        yield ThoughtEvent(thought="Initializing session...")
+        await self._load_state()
 
-            tool_calls = llm.get_tool_calls_from_response(
-                last_response, error_on_no_tool_call=False
-            )
-            if not tool_calls or function_calls >= MAX_FUNCTION_CALLS:
-                break
+        # Run title generation in background to not block the main loop
+        asyncio.create_task(self._generate_title(query))
 
-            if not ALLOW_PARALLEL_TOOL_CALLS and len(tool_calls) > 1:
-                raise ValueError(
-                    "Parallel tool calls not supported for workflow tool execution."
-                )
-
-            for tool_call in tool_calls:
-                ctx.write_event_to_stream(
-                    ToolCallEvent(
-                        tool_name=tool_call.tool_name,
-                        tool_kwargs=tool_call.tool_kwargs,
-                    )
-                )
-
-            tool_outputs = await _call_tools(tool_calls, tools)
-            function_calls += len(tool_calls)
-
-            if len(tool_calls) == 1:
-                tool = next(
-                    (t for t in tools if t.metadata.name == tool_calls[0].tool_name),
-                    None,
-                )
-                if tool is not None and tool.metadata.return_direct:
-                    response_message = ChatMessage(
-                        role=MessageRole.ASSISTANT,
-                        content=tool_outputs[0].content,
-                    )
-                    break
-
-            for tool_call, tool_output in zip(tool_calls, tool_outputs):
-                tool_message = ChatMessage(
-                    content=str(tool_output),
-                    role=MessageRole.TOOL,
-                    additional_kwargs={
-                        "name": tool_call.tool_name,
-                        "tool_call_id": tool_call.tool_id,
-                    },
-                )
-                messages.append(tool_message)
-
-            if user_msg:
-                messages.insert(0, ChatMessage(role=MessageRole.USER, content=user_msg))
-            user_msg = None
-
-        continue_task_flag = await ctx.get("continue_task", default=False)
-
-        if continue_task_flag:
-            summary = await ctx.get("session_summary", default="")
-
-            continuation_number = await ctx.get("continuation_number", default=0) + 1
-            await ctx.set("continuation_number", continuation_number)
-
-            prompt = RichPromptTemplate(RESUMING_PROMPT_TEMPLATE)
-            next_query = prompt.format(
-                progress_text=summary,
-                continuation_number=continuation_number,
+        # Prepare the prompt
+        if self.state.get("continue_task"):
+            prompt_tmpl = RichPromptTemplate(RESUMING_PROMPT_TEMPLATE)
+            formatted_query = prompt_tmpl.format(
+                progress_text=self.state.get("session_summary", ""),
+                continuation_number=self.state.get("continuation_number", 0) + 1,
                 current_date=datetime.now().strftime("%A, %B %d, %Y"),
             )
+            self.state["continuation_number"] = (
+                self.state.get("continuation_number", 0) + 1
+            )
+            self.state["continue_task"] = False
+        else:
+            prompt_tmpl = RichPromptTemplate(STARTING_PROMPT_TEMPLATE)
+            formatted_query = prompt_tmpl.format(
+                query=query,
+                step_threshold=settings.step_threshold,
+                work_dir=os.getcwd(),
+                current_pid=os.getpid(),
+                current_date=datetime.now().strftime("%A, %B %d, %Y"),
+            )
+            # Store original query to replace the formatted one in history later
+            self.state["current_user_query"] = query
 
-            await ctx.set("continue_task", False)
-            return LoopEvent(query=next_query)
+        self.state["chat_history"].append({"role": "user", "content": formatted_query})
 
-        response_text = ""
-        if response_message is not None and response_message.content is not None:
-            response_text = str(response_message.content)
+        completion_args = get_completion_args()
+        function_calls = 0
+        final_response_content = ""
 
-        current_query = await ctx.get("current_user_query")
-        history_dicts.append({"role": MessageRole.USER, "content": current_query})
-        history_dicts.append({"role": MessageRole.ASSISTANT, "content": response_text})
-        await ctx.set("chat_history", history_dicts)
+        while function_calls < MAX_FUNCTION_CALLS:
+            response = await litellm.acompletion(
+                **completion_args,
+                messages=self.state["chat_history"],
+                tools=self.litellm_tools,
+                stream=True,
+            )
 
-        return StopEvent(result=response_text)
+            current_content = ""
+            tool_calls = []
+
+            async for chunk in response:
+                delta = chunk.choices[0].delta
+
+                # Handle reasoning/thoughts
+                thought = getattr(delta, "reasoning_content", None) or getattr(
+                    delta, "reasoning", None
+                )
+                if thought:
+                    yield ThoughtEvent(thought=thought)
+
+                if delta.content:
+                    current_content += delta.content
+                    yield ThoughtEvent(thought=delta.content)
+
+                if delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        if len(tool_calls) <= tc_delta.index:
+                            tool_calls.append(
+                                {
+                                    "id": tc_delta.id,
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            )
+
+                        if tc_delta.id:
+                            tool_calls[tc_delta.index]["id"] = tc_delta.id
+                        if tc_delta.function.name:
+                            tool_calls[tc_delta.index]["function"]["name"] += (
+                                tc_delta.function.name
+                            )
+                        if tc_delta.function.arguments:
+                            tool_calls[tc_delta.index]["function"]["arguments"] += (
+                                tc_delta.function.arguments
+                            )
+
+            # Create assistant message for history
+            assistant_msg = {"role": "assistant", "content": current_content}
+            if tool_calls:
+                assistant_msg["tool_calls"] = tool_calls
+
+            self.state["chat_history"].append(assistant_msg)
+            final_response_content = current_content
+
+            if not tool_calls:
+                break
+
+            # Execute tool calls
+            for tc in tool_calls:
+                tool_name = tc["function"]["name"]
+                tool_args = json.loads(tc["function"]["arguments"])
+
+                yield ToolCallEvent(tool_name=tool_name, tool_kwargs=tool_args)
+
+                tool_fn = self.tool_map.get(tool_name)
+                if tool_fn:
+                    try:
+                        import inspect
+
+                        if inspect.iscoroutinefunction(tool_fn):
+                            result = await tool_fn(**tool_args)
+                        else:
+                            result = tool_fn(**tool_args)
+
+                        # Handle continuation logic from finish tool
+                        if tool_name == "finish":
+                            if tool_args.get("continue_task"):
+                                self.state["continue_task"] = True
+                            self.state["session_summary"] = tool_args.get("summary", "")
+                    except Exception as e:
+                        result = f"Error executing tool {tool_name}: {e}"
+                else:
+                    result = f"Tool {tool_name} not found."
+
+                self.state["chat_history"].append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "name": tool_name,
+                        "content": str(result),
+                    }
+                )
+
+                function_calls += 1
+
+            if self.state.get("continue_task"):
+                break
+
+        # Cleanup: Replace formatted user query with original query in history for storage
+        if "current_user_query" in self.state:
+            for msg in reversed(self.state["chat_history"]):
+                if msg["role"] == "user":
+                    msg["content"] = self.state["current_user_query"]
+                    break
+            del self.state["current_user_query"]
+
+        await self._save_state()
+        yield final_response_content
+
+    async def get_history(self) -> List[Dict[str, Any]]:
+        await self._load_state()
+        history = []
+        for msg in self.state.get("chat_history", []):
+            role = msg["role"]
+            content = msg.get("content", "")
+
+            # If it's a tool call assistant message, let's include tool call info in content for frontend
+            if role == "assistant" and msg.get("tool_calls"):
+                tc_names = [tc["function"]["name"] for tc in msg["tool_calls"]]
+                if content:
+                    content += f"\n\n*Calling tools: {', '.join(tc_names)}*"
+                else:
+                    content = f"*Calling tools: {', '.join(tc_names)}*"
+
+            # If it's a tool response, format it for frontend
+            if role == "tool":
+                tool_name = msg.get("name", "tool")
+                content = f"### Tool Result: {tool_name}\n\n{content}"
+
+            history.append({"role": role, "content": content})
+        return history
