@@ -219,6 +219,8 @@ class InfiniteAgentWorkflow(Workflow):
                 )
                 messages.append(tool_message)
 
+            if user_msg:
+                messages.insert(0, ChatMessage(role=MessageRole.USER, content=user_msg))
             user_msg = None
 
         continue_task_flag = await ctx.get("continue_task", default=False)

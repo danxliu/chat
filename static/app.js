@@ -201,7 +201,7 @@ function updateThinkingLog(data) {
     } else if (data.type === 'tool_call') {
         const toolEl = document.createElement('div');
         toolEl.className = 'tool-call';
-        toolEl.innerHTML = `<strong>Tool:</strong> ${data.tool}<br><strong>Args:</strong> ${JSON.stringify(data.args, null, 2)}`;
+        toolEl.innerHTML = `<strong>Using tool:</strong> ${data.tool}`;
         logDiv.appendChild(toolEl);
     }
     
