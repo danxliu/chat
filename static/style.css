@@ -216,6 +216,11 @@ body {
     padding: 0;
     font-size: 1em;
     outline: none;
+    resize: none;
+    overflow-y: hidden;
+    max-height: 200px;
+    font-family: inherit;
+    line-height: 1.5;
 }
 
 #send-button {
@@ -251,10 +256,10 @@ body {
 }
 
 .thinking-button {
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
+    background: transparent;
+    border: 1px solid transparent;
     color: var(--text-secondary);
-    padding: 6px 14px;
+    padding: 8px 12px;
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.85em;
@@ -269,31 +274,26 @@ body {
 .thinking-button:hover {
     background: var(--surface-hover);
     color: var(--text-primary);
-    border-color: var(--text-secondary);
+    border-color: var(--border-color);
 }
 
 .thinking-button.expanded {
     background: var(--surface-active);
     color: var(--text-primary);
+    border-color: var(--border-color);
 }
 
 .thinking-button.finalized {
     cursor: pointer;
     font-style: normal;
-    background: transparent;
-    border: 1px solid transparent;
 }
 
 .thinking-button.finalized:hover {
-    border-color: var(--border-color);
     background: var(--surface-hover);
+    border-color: var(--border-color);
 }
 
 .thought-log {
-    background: var(--bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 12px;
     font-size: 0.85em;
     color: var(--text-secondary);
     max-height: 400px;
@@ -301,15 +301,13 @@ body {
     white-space: pre-wrap;
     width: 100%;
     max-width: 800px;
+    padding: 4px 0;
 }
 
 .tool-call {
-    background: var(--surface-hover);
-    padding: 8px 12px;
-    margin: 8px 0;
-    border-radius: 4px;
+    margin: 4px 0;
     color: var(--text-primary);
-    font-style: italic;
+    font-size: 0.9em;
 }
 
 .dots span {

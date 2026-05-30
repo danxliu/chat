@@ -201,7 +201,7 @@ function updateThinkingLog(data) {
     } else if (data.type === 'tool_call') {
         const toolEl = document.createElement('div');
         toolEl.className = 'tool-call';
-        toolEl.innerHTML = `<strong>Using tool:</strong> ${data.tool}`;
+        toolEl.innerHTML = `<strong>Tool call:</strong> ${data.tool}`;
         logDiv.appendChild(toolEl);
     }
     
@@ -307,13 +307,28 @@ function sendMessage() {
             content: text
         }));
         userInput.value = '';
+        userInput.style.height = 'auto';
     }
 }
 
 sendButton.addEventListener('click', sendMessage);
-userInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
+
+userInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
         sendMessage();
+    }
+});
+
+userInput.addEventListener('input', () => {
+    userInput.style.height = 'auto';
+    userInput.style.height = userInput.scrollHeight + 'px';
+    
+    // Show scrollbar if max-height reached
+    if (userInput.scrollHeight > 200) {
+        userInput.style.overflowY = 'auto';
+    } else {
+        userInput.style.overflowY = 'hidden';
     }
 });
 
