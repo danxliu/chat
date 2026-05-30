@@ -25,6 +25,12 @@ const messageHandlers = {
     [MessageType.ERROR]: handleErrorMessage
 };
 
+// Configure marked to handle line breaks properly
+marked.setOptions({
+    breaks: true,
+    gfm: true
+});
+
 async function init() {
     connectWebSocket();
     await loadSessions();
@@ -54,6 +60,9 @@ async function loadSessions() {
     data.sessions.forEach(sid => {
         const li = document.createElement('li');
         li.className = 'session-item';
+        if (sid === currentSessionId) {
+            li.classList.add('active');
+        }
         
         const span = document.createElement('span');
         span.textContent = sid;
@@ -61,7 +70,7 @@ async function loadSessions() {
         li.appendChild(span);
 
         const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = '×';
+        deleteBtn.innerHTML = '<span class="material-icons">delete</span>';
         deleteBtn.className = 'delete-session';
         deleteBtn.onclick = (e) => {
             e.stopPropagation();
@@ -69,9 +78,6 @@ async function loadSessions() {
         };
         li.appendChild(deleteBtn);
 
-        if (sid === currentSessionId) {
-            li.classList.add('active');
-        }
         chatList.appendChild(li);
     });
 }
@@ -86,7 +92,6 @@ async function deleteSession(sessionId) {
     }
     await loadSessions();
     
-    // If we deleted the active session, pick another one or create new
     const response = await fetch('/api/chats');
     const data = await response.json();
     if (data.sessions.length > 0) {
@@ -101,7 +106,7 @@ async function loadHistory(sessionId) {
     const data = await response.json();
     messagesDiv.innerHTML = '';
     data.history.forEach(msg => {
-        appendMessage(msg.role === 'user' ? 'You' : 'Assistant', msg.content);
+        appendMessage(msg.role === 'user' ? 'user' : 'assistant', msg.content);
     });
 }
 
@@ -166,10 +171,9 @@ function connectWebSocket() {
 }
 
 function handleIncomingMessage(payload) {
-    // Only append if it's for the current session
     if (payload.session_id === currentSessionId) {
         removeThinkingIndicator();
-        appendMessage('Assistant', payload.content);
+        appendMessage('assistant', payload.content);
     }
 }
 
@@ -179,15 +183,13 @@ function handleThinking(payload) {
     }
 }
 
-function handlePong(payload) {
-    // Heartbeat acknowledged
-}
+function handlePong(payload) {}
 
 function handleErrorMessage(payload) {
     console.error('Server Error:', payload.message);
     if (!payload.session_id || payload.session_id === currentSessionId) {
         removeThinkingIndicator();
-        appendMessage('System', 'Error: ' + payload.message);
+        appendMessage('system', 'Error: ' + payload.message);
     }
 }
 
@@ -195,8 +197,6 @@ function showThinkingIndicator(text) {
     removeThinkingIndicator();
     const thinkingDiv = document.createElement('div');
     thinkingDiv.id = 'thinking-indicator';
-    thinkingDiv.style.fontStyle = 'italic';
-    thinkingDiv.style.color = '#888';
     thinkingDiv.textContent = text;
     messagesDiv.appendChild(thinkingDiv);
     chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -207,9 +207,31 @@ function removeThinkingIndicator() {
     if (indicator) indicator.remove();
 }
 
-function appendMessage(sender, text) {
+function appendMessage(role, text) {
     const msgElement = document.createElement('div');
-    msgElement.innerHTML = `<strong>${sender}:</strong> ${text}`;
+    msgElement.className = `message ${role}-message`;
+    
+    if (role === 'assistant') {
+        // Parse Markdown and sanitize
+        const rawHtml = marked.parse(text);
+        const cleanHtml = DOMPurify.sanitize(rawHtml);
+        msgElement.innerHTML = cleanHtml;
+        
+        // Render LaTeX
+        renderMathInElement(msgElement, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false},
+                {left: '\\(', right: '\\)', display: false},
+                {left: '\\[', right: '\\]', display: true}
+            ],
+            throwOnError: false
+        });
+    } else {
+        // For user messages, we can just use textContent or simple styling
+        msgElement.textContent = text;
+    }
+    
     messagesDiv.appendChild(msgElement);
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
@@ -217,7 +239,7 @@ function appendMessage(sender, text) {
 function sendMessage() {
     const text = userInput.value.trim();
     if (text && socket && socket.readyState === WebSocket.OPEN && currentSessionId) {
-        appendMessage('You', text);
+        appendMessage('user', text);
         socket.send(JSON.stringify({
             type: MessageType.MESSAGE,
             session_id: currentSessionId,

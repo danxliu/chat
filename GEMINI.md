@@ -8,6 +8,12 @@ This is a Python-based AI agent application named `agent`. It leverages the `lla
 - **LlamaIndex**: Framework for building LLM applications (agent orchestration, LLM integration).
 - **Pydantic / Pydantic Settings**: Data validation and configuration management.
 - **uv**: Fast Python package installer and resolver.
+- **Frontend**:
+    - **Vanilla JS/CSS/HTML**: Core frontend implementation.
+    - **Marked.js**: Markdown rendering.
+    - **KaTeX**: LaTeX math rendering.
+    - **DOMPurify**: HTML sanitization.
+    - **Material Symbols**: UI icons.
 
 ### Architecture
 - `main.py`: The entry point that initializes and executes the agent.
