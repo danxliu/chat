@@ -8,6 +8,8 @@ async def call_subagent(query: str, tools: Optional[Any] = None) -> str:
     Otherwise, it will be a bare agent (useful for simple tasks like summarization).
     """
     llm = get_llm()
-    agent = create_agent(llm, tools or [])
+    if not isinstance(tools, list):
+        tools = []
+    agent = create_agent(llm, tools)
     response = await agent.achat(query)
     return str(response)

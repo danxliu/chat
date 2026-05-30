@@ -8,6 +8,7 @@ const userInput = document.getElementById('user-input');
 const sendButton = document.getElementById('send-button');
 const chatList = document.getElementById('chat-list');
 const newChatButton = document.getElementById('new-chat');
+const clearAllButton = document.getElementById('clear-all');
 
 const MessageType = {
     MESSAGE: 'message',
@@ -172,14 +173,41 @@ function connectWebSocket() {
 
 function handleIncomingMessage(payload) {
     if (payload.session_id === currentSessionId) {
-        removeThinkingIndicator();
+        finalizeThinkingIndicator();
         appendMessage('assistant', payload.content);
     }
 }
 
 function handleThinking(payload) {
     if (payload.session_id === currentSessionId) {
-        showThinkingIndicator(payload.content);
+        if (payload.data) {
+            updateThinkingLog(payload.data);
+        } else {
+            showThinkingIndicator(payload.content || 'Assistant is thinking...');
+        }
+    }
+}
+
+function updateThinkingLog(data) {
+    let indicator = document.getElementById('thinking-indicator');
+    if (!indicator) {
+        showThinkingIndicator('Assistant is thinking...');
+        indicator = document.getElementById('thinking-indicator');
+    }
+    
+    const logDiv = indicator.querySelector('.thought-log');
+    if (data.type === 'thought') {
+        logDiv.textContent += data.content;
+    } else if (data.type === 'tool_call') {
+        const toolEl = document.createElement('div');
+        toolEl.className = 'tool-call';
+        toolEl.innerHTML = `<strong>Tool:</strong> ${data.tool}<br><strong>Args:</strong> ${JSON.stringify(data.args, null, 2)}`;
+        logDiv.appendChild(toolEl);
+    }
+    
+    // Auto scroll the log if it's visible
+    if (logDiv.style.display !== 'none') {
+        logDiv.scrollTop = logDiv.scrollHeight;
     }
 }
 
@@ -188,18 +216,51 @@ function handlePong(payload) {}
 function handleErrorMessage(payload) {
     console.error('Server Error:', payload.message);
     if (!payload.session_id || payload.session_id === currentSessionId) {
-        removeThinkingIndicator();
+        finalizeThinkingIndicator();
         appendMessage('system', 'Error: ' + payload.message);
     }
 }
 
 function showThinkingIndicator(text) {
-    removeThinkingIndicator();
-    const thinkingDiv = document.createElement('div');
-    thinkingDiv.id = 'thinking-indicator';
-    thinkingDiv.textContent = text;
-    messagesDiv.appendChild(thinkingDiv);
+    if (document.getElementById('thinking-indicator')) return;
+    
+    const container = document.createElement('div');
+    container.id = 'thinking-indicator';
+    container.className = 'assistant-thinking-container';
+    
+    const button = document.createElement('button');
+    button.className = 'thinking-button';
+    button.innerHTML = `Thinking<span class="dots"><span>.</span><span>.</span><span>.</span></span>`;
+    
+    const logDiv = document.createElement('div');
+    logDiv.className = 'thought-log';
+    logDiv.style.display = 'none';
+    
+    button.onclick = () => {
+        const isHidden = logDiv.style.display === 'none';
+        logDiv.style.display = isHidden ? 'block' : 'none';
+        button.classList.toggle('expanded', isHidden);
+        if (isHidden) {
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+    };
+    
+    container.appendChild(button);
+    container.appendChild(logDiv);
+    messagesDiv.appendChild(container);
     chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function finalizeThinkingIndicator() {
+    const indicator = document.getElementById('thinking-indicator');
+    if (indicator) {
+        indicator.id = ''; // Remove ID to allow a new one for next message
+        const button = indicator.querySelector('.thinking-button');
+        if (button) {
+            button.innerHTML = 'View Thought Process';
+            button.classList.add('finalized');
+        }
+    }
 }
 
 function removeThinkingIndicator() {
@@ -257,5 +318,17 @@ userInput.addEventListener('keypress', (e) => {
 });
 
 newChatButton.addEventListener('click', createNewSession);
+
+async function clearAllSessions() {
+    if (!confirm('Are you sure you want to clear ALL chat history? This cannot be undone.')) return;
+    
+    await fetch('/api/chats', { method: 'DELETE' });
+    currentSessionId = null;
+    messagesDiv.innerHTML = '';
+    await loadSessions();
+    await createNewSession();
+}
+
+clearAllButton.addEventListener('click', clearAllSessions);
 
 init();

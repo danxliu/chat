@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from llama_index.core.agent import ReActAgent
+from llama_index.core.agent import AgentRunner, FunctionCallingAgentWorker
 from llama_index.core.base.llms.types import ChatMessage
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai_like import OpenAILike
@@ -25,7 +25,8 @@ def create_agent(
     llm: OpenAILike,
     tools: List[FunctionTool],
     chat_history: Optional[List[ChatMessage]] = None,
-) -> ReActAgent:
-    return ReActAgent.from_tools(
-        tools, llm=llm, chat_history=chat_history or [], verbose=True
+) -> AgentRunner:
+    worker = FunctionCallingAgentWorker.from_tools(
+        tools, llm=llm, verbose=True
     )
+    return AgentRunner(worker, chat_history=chat_history or [])

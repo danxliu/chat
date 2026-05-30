@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from llama_index.core.workflow import Context
 
-from agent import InfiniteAgentWorkflow
+from workflow import InfiniteAgentWorkflow, ThoughtEvent, ToolCallEvent
 from storage import chat_storage
 
 app = FastAPI()
@@ -80,6 +80,18 @@ async def delete_chat(session_id: str):
     return {"status": "success"}
 
 
+@app.get("/api/chats/clear") # Legacy or for manual browser call
+async def clear_chats_get():
+    await chat_storage.clear_all()
+    return {"status": "success"}
+
+
+@app.delete("/api/chats")
+async def clear_all_chats():
+    await chat_storage.clear_all()
+    return {"status": "success"}
+
+
 async def handle_message(payload: Dict[str, Any], websocket: WebSocket, workflow: InfiniteAgentWorkflow, cancel_events: Dict[str, asyncio.Event]):
     session_id = payload.get("session_id")
     user_msg = payload.get("content")
@@ -97,12 +109,29 @@ async def handle_message(payload: Dict[str, Any], websocket: WebSocket, workflow
         cancel_events[session_id] = asyncio.Event()
     cancel_events[session_id].clear()
     
-    # Simple "thinking" indicator
-    await websocket.send_json({"type": MessageType.THINKING, "session_id": session_id, "content": "Assistant is thinking..."})
-    
     try:
-        # Note: True cancellation requires wrapping workflow.run in a task and waiting on both it and the event
-        response = await workflow.run(query=user_msg, ctx=ctx)
+        # Capture the workflow handler to stream events
+        handler = workflow.run(query=user_msg, ctx=ctx)
+        
+        async for event in handler.stream_events():
+            if isinstance(event, ThoughtEvent):
+                await websocket.send_json({
+                    "type": MessageType.THINKING,
+                    "session_id": session_id,
+                    "data": {"type": "thought", "content": event.thought}
+                })
+            elif isinstance(event, ToolCallEvent):
+                await websocket.send_json({
+                    "type": MessageType.THINKING,
+                    "session_id": session_id,
+                    "data": {
+                        "type": "tool_call",
+                        "tool": event.tool_name,
+                        "args": event.tool_kwargs
+                    }
+                })
+        
+        response = await handler
         await chat_storage.save_context(session_id, ctx)
         await websocket.send_json({
             "type": MessageType.MESSAGE,
