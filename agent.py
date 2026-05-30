@@ -22,7 +22,6 @@ from prompts import (
     STARTING_PROMPT_TEMPLATE,
     RichPromptTemplate,
 )
-from tools.ask_user import ask_user
 from tools.execute_python import execute_python
 from tools.finance import get_stock_data, get_stock_history
 from tools.finish import get_finish_tool
@@ -45,7 +44,6 @@ def get_tools(
         FunctionTool.from_defaults(fn=get_stock_data),
         FunctionTool.from_defaults(fn=get_stock_history),
         FunctionTool.from_defaults(fn=execute_python),
-        FunctionTool.from_defaults(fn=ask_user),
     ]
 
     if ctx and session_id:
