@@ -13,6 +13,8 @@ services:
       - TITLE_MODEL
       - MAX_TOKENS
       - TEMPERATURE
+      - FREQUENCY_PENALTY
+      - PRESENCE_PENALTY
     depends_on:
       - redis
 
