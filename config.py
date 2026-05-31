@@ -13,7 +13,9 @@ class Settings(BaseSettings):
     model_str: str = Field(default="local-model", alias="model")
     title_model: str = "local-model"
     max_tokens: int = 8192
-    temperature: float = 0.1
+    temperature: float = 0.6
+    frequency_penalty: float = 0.5
+    presence_penalty: float = 0.2
     timeout: float = 600.0
     step_threshold: int = 15
     redis_host: str = "127.0.0.1"

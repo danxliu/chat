@@ -11,5 +11,7 @@ def get_completion_args(model: str) -> Dict[str, Any]:
         "api_key": settings.api_key,
         "temperature": settings.temperature,
         "max_tokens": settings.max_tokens,
+        "frequency_penalty": settings.frequency_penalty,
+        "presence_penalty": settings.presence_penalty,
         "timeout": settings.timeout,
     }
