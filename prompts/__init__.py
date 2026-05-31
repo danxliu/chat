@@ -1,6 +1,5 @@
 import jinja2
 from .starting import STARTING_PROMPT_TEMPLATE, IMPORTANT_INSTRUCTIONS
-from .resuming import RESUMING_PROMPT_TEMPLATE
 from .summarizer import SUMMARIZER_PROMPT_TEMPLATE, TITLE_SUMMARIZER_PROMPT_TEMPLATE
 
 class RichPromptTemplate:

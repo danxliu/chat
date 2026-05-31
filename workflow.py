@@ -11,7 +11,6 @@ from agent import get_tools
 from agent_factory import get_completion_args
 from config import settings
 from prompts import (
-    RESUMING_PROMPT_TEMPLATE,
     STARTING_PROMPT_TEMPLATE,
     TITLE_SUMMARIZER_PROMPT_TEMPLATE,
     RichPromptTemplate,
@@ -23,6 +22,14 @@ MAX_FUNCTION_CALLS = 10
 
 class ThoughtEvent(BaseModel):
     thought: str
+
+
+class ContentEvent(BaseModel):
+    content: str
+
+
+class TitleEvent(BaseModel):
+    title: str
 
 
 class ToolCallEvent(BaseModel):
@@ -47,9 +54,6 @@ class AgentExecutor:
             self.state = {
                 "chat_history": [],
                 "metadata": {"session_id": self.session_id},
-                "continuation_number": 0,
-                "continue_task": False,
-                "session_summary": "",
             }
 
     async def _save_state(self):
@@ -61,45 +65,37 @@ class AgentExecutor:
             try:
                 title_prompt = TITLE_SUMMARIZER_PROMPT_TEMPLATE.format(query=query)
                 completion_args = get_completion_args()
+                # Disable reasoning for title generation
+                completion_args["extra_body"] = {"enable_thinking": False}
+
                 response = await litellm.acompletion(
                     **completion_args,
                     messages=[{"role": "user", "content": title_prompt}],
                 )
                 title = response.choices[0].message.content.strip().replace('"', "")
                 await chat_storage.save_title(self.session_id, title)
+                return title
             except Exception as e:
                 print(f"Failed to generate title for session {self.session_id}: {e}")
+        return existing_title
 
     async def run(self, query: str) -> AsyncGenerator[Any, None]:
-        yield ThoughtEvent(thought="Initializing session...")
         await self._load_state()
 
         # Run title generation in background to not block the main loop
-        asyncio.create_task(self._generate_title(query))
+        title_task = asyncio.create_task(self._generate_title(query))
+        title_yielded = False
 
         # Prepare the prompt
-        if self.state.get("continue_task"):
-            prompt_tmpl = RichPromptTemplate(RESUMING_PROMPT_TEMPLATE)
-            formatted_query = prompt_tmpl.format(
-                progress_text=self.state.get("session_summary", ""),
-                continuation_number=self.state.get("continuation_number", 0) + 1,
-                current_date=datetime.now().strftime("%A, %B %d, %Y"),
-            )
-            self.state["continuation_number"] = (
-                self.state.get("continuation_number", 0) + 1
-            )
-            self.state["continue_task"] = False
-        else:
-            prompt_tmpl = RichPromptTemplate(STARTING_PROMPT_TEMPLATE)
-            formatted_query = prompt_tmpl.format(
-                query=query,
-                step_threshold=settings.step_threshold,
-                work_dir=os.getcwd(),
-                current_pid=os.getpid(),
-                current_date=datetime.now().strftime("%A, %B %d, %Y"),
-            )
-            # Store original query to replace the formatted one in history later
-            self.state["current_user_query"] = query
+        prompt_tmpl = RichPromptTemplate(STARTING_PROMPT_TEMPLATE)
+        formatted_query = prompt_tmpl.format(
+            query=query,
+            work_dir=os.getcwd(),
+            current_pid=os.getpid(),
+            current_date=datetime.now().strftime("%A, %B %d, %Y"),
+        )
+        # Store original query to replace the formatted one in history later
+        self.state["current_user_query"] = query
 
         self.state["chat_history"].append({"role": "user", "content": formatted_query})
 
@@ -116,21 +112,33 @@ class AgentExecutor:
             )
 
             current_content = ""
+            current_thought = ""
             tool_calls = []
 
             async for chunk in response:
                 delta = chunk.choices[0].delta
+
+                # Handle title update if ready
+                if not title_yielded and title_task.done():
+                    try:
+                        title = title_task.result()
+                        if title:
+                            yield TitleEvent(title=title)
+                        title_yielded = True
+                    except Exception:
+                        title_yielded = True
 
                 # Handle reasoning/thoughts
                 thought = getattr(delta, "reasoning_content", None) or getattr(
                     delta, "reasoning", None
                 )
                 if thought:
+                    current_thought += thought
                     yield ThoughtEvent(thought=thought)
 
                 if delta.content:
                     current_content += delta.content
-                    yield ThoughtEvent(thought=delta.content)
+                    yield ContentEvent(content=delta.content)
 
                 if delta.tool_calls:
                     for tc_delta in delta.tool_calls:
@@ -156,6 +164,8 @@ class AgentExecutor:
 
             # Create assistant message for history
             assistant_msg = {"role": "assistant", "content": current_content}
+            if current_thought:
+                assistant_msg["thought"] = current_thought
             if tool_calls:
                 assistant_msg["tool_calls"] = tool_calls
 
@@ -164,6 +174,16 @@ class AgentExecutor:
 
             if not tool_calls:
                 break
+
+            # Check title update after potential early break
+            if not title_yielded and title_task.done():
+                try:
+                    title = title_task.result()
+                    if title:
+                        yield TitleEvent(title=title)
+                    title_yielded = True
+                except Exception:
+                    title_yielded = True
 
             # Execute tool calls
             for tc in tool_calls:
@@ -181,12 +201,6 @@ class AgentExecutor:
                             result = await tool_fn(**tool_args)
                         else:
                             result = tool_fn(**tool_args)
-
-                        # Handle continuation logic from finish tool
-                        if tool_name == "finish":
-                            if tool_args.get("continue_task"):
-                                self.state["continue_task"] = True
-                            self.state["session_summary"] = tool_args.get("summary", "")
                     except Exception as e:
                         result = f"Error executing tool {tool_name}: {e}"
                 else:
@@ -202,9 +216,6 @@ class AgentExecutor:
                 )
 
                 function_calls += 1
-
-            if self.state.get("continue_task"):
-                break
 
         # Cleanup: Replace formatted user query with original query in history for storage
         if "current_user_query" in self.state:
@@ -224,18 +235,21 @@ class AgentExecutor:
             role = msg["role"]
             content = msg.get("content", "")
 
-            # If it's a tool call assistant message, let's include tool call info in content for frontend
-            if role == "assistant" and msg.get("tool_calls"):
-                tc_names = [tc["function"]["name"] for tc in msg["tool_calls"]]
-                if content:
-                    content += f"\n\n*Calling tools: {', '.join(tc_names)}*"
-                else:
-                    content = f"*Calling tools: {', '.join(tc_names)}*"
-
-            # If it's a tool response, format it for frontend
+            # Skip tool responses from being displayed as regular messages in history
             if role == "tool":
-                tool_name = msg.get("name", "tool")
-                content = f"### Tool Result: {tool_name}\n\n{content}"
+                continue
 
-            history.append({"role": role, "content": content})
+            thought = msg.get("thought", "")
+
+            if role in ["user", "assistant"]:
+                item = {
+                    "role": role,
+                    "content": content,
+                    "thought": thought if thought else None,
+                }
+                if role == "assistant" and msg.get("tool_calls"):
+                    item["tool_calls"] = [
+                        {"name": tc["function"]["name"]} for tc in msg["tool_calls"]
+                    ]
+                history.append(item)
         return history

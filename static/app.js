@@ -13,6 +13,8 @@ const clearAllButton = document.getElementById("clear-all");
 const MessageType = {
   MESSAGE: "message",
   THINKING: "thinking",
+  CONTENT_CHUNK: "content_chunk",
+  TITLE_UPDATE: "title_update",
   PING: "ping",
   PONG: "pong",
   CANCEL: "cancel",
@@ -22,9 +24,14 @@ const MessageType = {
 const messageHandlers = {
   [MessageType.MESSAGE]: handleIncomingMessage,
   [MessageType.THINKING]: handleThinking,
+  [MessageType.CONTENT_CHUNK]: handleContentChunk,
+  [MessageType.TITLE_UPDATE]: handleTitleUpdate,
   [MessageType.PONG]: handlePong,
   [MessageType.ERROR]: handleErrorMessage,
 };
+
+let currentAssistantMessageDiv = null;
+let currentAssistantContent = "";
 
 // Configure marked to handle line breaks properly
 marked.setOptions({
@@ -110,13 +117,55 @@ async function loadHistory(sessionId) {
   const response = await fetch(`/api/chats/${sessionId}/history`);
   const data = await response.json();
   messagesDiv.innerHTML = "";
-  data.history.forEach((msg) => {
-    appendMessage(msg.role === "user" ? "user" : "assistant", msg.content);
+  
+  let isThinkingOpen = false;
+
+  data.history.forEach((msg, index) => {
+    if (msg.role === "user") {
+      if (isThinkingOpen) {
+        finalizeThinkingIndicator();
+        isThinkingOpen = false;
+      }
+      appendMessage("user", msg.content);
+    } else if (msg.role === "assistant") {
+      const hasToolCalls = msg.tool_calls && msg.tool_calls.length > 0;
+
+      if (msg.thought || hasToolCalls || (msg.content && hasToolCalls)) {
+        if (!isThinkingOpen) {
+          showThinkingIndicator();
+          isThinkingOpen = true;
+        }
+        if (msg.thought) {
+          updateThinkingLog({ type: "thought", content: msg.thought });
+        }
+        if (hasToolCalls) {
+          msg.tool_calls.forEach((tc) => {
+            updateThinkingLog({ type: "tool_call", tool: tc.name });
+          });
+        }
+      }
+      
+      if (msg.content) {
+        if (isThinkingOpen) {
+          finalizeThinkingIndicator();
+          isThinkingOpen = false;
+        }
+        appendMessage("assistant", msg.content);
+      }
+      
+      // Finalize if it's the last message and still thinking
+      if (index === data.history.length - 1 && isThinkingOpen) {
+        finalizeThinkingIndicator();
+        isThinkingOpen = false;
+      }
+    }
   });
 }
 
 async function switchSession(sessionId) {
   currentSessionId = sessionId;
+  currentAssistantMessageDiv = null;
+  currentAssistantContent = "";
   await loadHistory(sessionId);
   updateActiveSessionInList();
 }
@@ -178,8 +227,62 @@ function connectWebSocket() {
 function handleIncomingMessage(payload) {
   if (payload.session_id === currentSessionId) {
     finalizeThinkingIndicator();
-    appendMessage("assistant", payload.content);
+    if (currentAssistantMessageDiv) {
+      // Just ensure final render is correct
+      currentAssistantContent = payload.content;
+      const rawHtml = marked.parse(currentAssistantContent);
+      const cleanHtml = DOMPurify.sanitize(rawHtml);
+      currentAssistantMessageDiv.innerHTML = cleanHtml;
+      renderMathInElement(currentAssistantMessageDiv, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false },
+          { left: "\\(", right: "\\)", display: false },
+          { left: "\\[", right: "\\]", display: true },
+        ],
+        throwOnError: false,
+      });
+      currentAssistantMessageDiv = null;
+      currentAssistantContent = "";
+    } else {
+      appendMessage("assistant", payload.content);
+    }
     loadSessions(); // Reload sessions to update title if it was just generated
+  }
+}
+
+function handleTitleUpdate(payload) {
+  loadSessions();
+}
+
+function handleContentChunk(payload) {
+  if (payload.session_id === currentSessionId) {
+    if (!currentAssistantMessageDiv) {
+      finalizeThinkingIndicator();
+      currentAssistantMessageDiv = document.createElement("div");
+      currentAssistantMessageDiv.className = "message assistant-message";
+      messagesDiv.appendChild(currentAssistantMessageDiv);
+      currentAssistantContent = "";
+    }
+
+    currentAssistantContent += payload.content;
+
+    // Parse Markdown and sanitize
+    const rawHtml = marked.parse(currentAssistantContent);
+    const cleanHtml = DOMPurify.sanitize(rawHtml);
+    currentAssistantMessageDiv.innerHTML = cleanHtml;
+
+    // Render LaTeX
+    renderMathInElement(currentAssistantMessageDiv, {
+      delimiters: [
+        { left: "$$", right: "$$", display: true },
+        { left: "$", right: "$", display: false },
+        { left: "\\(", right: "\\)", display: false },
+        { left: "\\[", right: "\\]", display: true },
+      ],
+      throwOnError: false,
+    });
+    chatContainer.scrollTop = chatContainer.scrollHeight;
   }
 }
 
@@ -202,12 +305,18 @@ function updateThinkingLog(data) {
 
   const logDiv = indicator.querySelector(".thought-log");
   if (data.type === "thought") {
-    logDiv.textContent += data.content;
+    logDiv.appendChild(document.createTextNode(data.content));
   } else if (data.type === "tool_call") {
     const toolEl = document.createElement("div");
     toolEl.className = "tool-call";
-    toolEl.innerHTML = `<strong>Tool call:</strong> ${data.tool}`;
+    toolEl.innerHTML = `<strong>Tool Call:</strong> ${data.tool}\n\n`;
     logDiv.appendChild(toolEl);
+
+    // Update thinking button text
+    const button = indicator.querySelector(".thinking-button");
+    if (button && !button.classList.contains("finalized")) {
+      button.innerHTML = `Calling \`${data.tool}\`<span class="dots"><span>.</span><span>.</span><span>.</span></span>`;
+    }
   }
 
   // Auto scroll the log if it's visible

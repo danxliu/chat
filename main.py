@@ -10,7 +10,13 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from workflow import AgentExecutor, ThoughtEvent, ToolCallEvent
+from workflow import (
+    AgentExecutor,
+    ThoughtEvent,
+    ToolCallEvent,
+    ContentEvent,
+    TitleEvent,
+)
 from storage import chat_storage
 
 app = FastAPI()
@@ -23,6 +29,8 @@ class MessageType(str, Enum):
     # Active Chat Loop
     MESSAGE = "message"
     THINKING = "thinking"
+    CONTENT_CHUNK = "content_chunk"
+    TITLE_UPDATE = "title_update"
     PING = "ping"
     PONG = "pong"
     CANCEL = "cancel"
@@ -41,9 +49,6 @@ async def create_chat():
     await chat_storage.save_context(session_id, {
         "chat_history": [],
         "metadata": {"session_id": session_id},
-        "continuation_number": 0,
-        "continue_task": False,
-        "session_summary": ""
     })
     return {"session_id": session_id}
 
@@ -107,6 +112,18 @@ async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_e
                         "tool": event.tool_name,
                         "args": event.tool_kwargs
                     }
+                })
+            elif isinstance(event, ContentEvent):
+                await websocket.send_json({
+                    "type": MessageType.CONTENT_CHUNK,
+                    "session_id": session_id,
+                    "content": event.content
+                })
+            elif isinstance(event, TitleEvent):
+                await websocket.send_json({
+                    "type": MessageType.TITLE_UPDATE,
+                    "session_id": session_id,
+                    "title": event.title
                 })
             elif isinstance(event, str):
                 final_response = event
