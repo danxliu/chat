@@ -105,8 +105,6 @@ class AgentExecutor:
         prompt_tmpl = RichPromptTemplate(STARTING_PROMPT_TEMPLATE)
         formatted_query = prompt_tmpl.format(
             query=query,
-            work_dir=os.getcwd(),
-            current_pid=os.getpid(),
             current_date=datetime.now().strftime("%A, %B %d, %Y"),
         )
         completion_args = get_completion_args(model=model_name)
@@ -114,9 +112,10 @@ class AgentExecutor:
         completion_args["tool_choice"] = "auto"
 
         final_content = ""
+        should_stop = False
 
         try:
-            while True:
+            while not should_stop:
                 api_messages = self.state["chat_history"].copy()
                 # Inject the formatted prompt into the most recent user message for the API call
                 for i in reversed(range(len(api_messages))):
@@ -171,6 +170,12 @@ class AgentExecutor:
                 if current_thought:
                     assistant_msg["thought"] = current_thought
 
+                if current_content:
+                    if final_content:
+                        final_content += "\n\n" + current_content
+                    else:
+                        final_content = current_content
+
                 if tool_calls:
                     tool_calls_dict = [tc.model_dump() for tc in tool_calls]
                     assistant_msg["tool_calls"] = tool_calls_dict
@@ -178,6 +183,9 @@ class AgentExecutor:
 
                     for tc in tool_calls:
                         name = tc.function.name
+                        if name == "finish_task":
+                            should_stop = True
+
                         args_str = tc.function.arguments
                         try:
                             args = json.loads(args_str) if args_str else {}
@@ -199,8 +207,15 @@ class AgentExecutor:
                     continue
                 else:
                     self.state["chat_history"].append(assistant_msg)
-                    final_content = current_content
-                    break
+                    # If the agent sends a message without calling a tool, we give it a reminder
+                    self.state["chat_history"].append(
+                        {
+                            "role": "system",
+                            "content": "You have not called any tools. If you have finished the task, please call the finish_task tool. If you need to perform more actions, use the available tools.",
+                        }
+                    )
+                    await self._save_state()
+                    continue
 
         except Exception as e:
             logger.exception("Critical error during agent execution.")

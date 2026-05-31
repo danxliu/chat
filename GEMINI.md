@@ -19,7 +19,7 @@ This is a Python-based AI agent application named `agent`. It leverages the `Lit
 
 ### Architecture
 - `main.py`: The entry point that initializes the FastAPI app and handles WebSockets.
-- `workflow.py`: Contains the `AgentExecutor` class, which manages the LLM chat loop, sequential tool calling, and session state.
+- `workflow.py`: Contains the `AgentExecutor` class, which manages the LLM chat loop. The agent is fully autonomous and will continue looping until it explicitly calls the `finish_task` tool. If the agent sends a message without calling any tools, it receives a hidden system reminder to either continue or finish.
 - `agent.py`: Returns the list of available tool functions.
 - `agent_factory.py`: Provides default completion arguments for LiteLLM.
 - `storage.py`: Manages Redis-based storage for session context and titles using raw JSON.
