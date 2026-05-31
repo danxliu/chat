@@ -17,6 +17,7 @@ from workflow import (
     TitleEvent,
 )
 from storage import chat_storage
+from config import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,6 +62,11 @@ async def list_chats():
     return {"sessions": sessions}
 
 
+@app.get("/api/models")
+async def list_models():
+    return {"models": settings.models}
+
+
 @app.get("/api/chats/{session_id}/history")
 async def get_chat_history(session_id: str):
     executor = AgentExecutor(session_id)
@@ -83,8 +89,17 @@ async def clear_all_chats():
 async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_events: Dict[str, asyncio.Event]):
     session_id = payload.get("session_id")
     user_msg = payload.get("content")
+    model_name = payload.get("model")
     
     if not session_id or not user_msg:
+        return
+
+    if not model_name or model_name not in settings.models:
+        await websocket.send_json({
+            "type": MessageType.ERROR,
+            "session_id": session_id,
+            "message": f"Invalid or missing model: {model_name}"
+        })
         return
         
     executor = AgentExecutor(session_id)
@@ -94,7 +109,7 @@ async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_e
     cancel_events[session_id].clear()
     
     try:
-        handler = executor.run(query=user_msg)
+        handler = executor.run(query=user_msg, model_name=model_name)
         
         final_response = ""
         async for event in handler:

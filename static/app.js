@@ -9,6 +9,7 @@ const sendButton = document.getElementById("send-button");
 const chatList = document.getElementById("chat-list");
 const newChatButton = document.getElementById("new-chat");
 const clearAllButton = document.getElementById("clear-all");
+const modelSelector = document.getElementById("model-selector");
 
 const MessageType = {
   MESSAGE: "message",
@@ -42,6 +43,7 @@ marked.setOptions({
 async function init() {
   connectWebSocket();
   await loadSessions();
+  await loadModels();
 
   // Create an initial session if none exist
   const response = await fetch("/api/chats");
@@ -51,6 +53,18 @@ async function init() {
   } else {
     await switchSession(data.sessions[0].session_id);
   }
+}
+
+async function loadModels() {
+  const response = await fetch("/api/models");
+  const data = await response.json();
+  modelSelector.innerHTML = "";
+  data.models.forEach((model) => {
+    const option = document.createElement("option");
+    option.value = model;
+    option.textContent = model;
+    modelSelector.appendChild(option);
+  });
 }
 
 async function createNewSession() {
@@ -413,8 +427,10 @@ function appendMessage(role, text) {
 
 function sendMessage() {
   const text = userInput.value.trim();
+  const model = modelSelector.value;
   if (
     text &&
+    model &&
     socket &&
     socket.readyState === WebSocket.OPEN &&
     currentSessionId
@@ -425,6 +441,7 @@ function sendMessage() {
         type: MessageType.MESSAGE,
         session_id: currentSessionId,
         content: text,
+        model: model,
       }),
     );
     userInput.value = "";

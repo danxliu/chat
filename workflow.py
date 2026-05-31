@@ -69,7 +69,7 @@ class AgentExecutor:
 
         try:
             title_prompt = TITLE_SUMMARIZER_PROMPT_TEMPLATE.format(query=query)
-            args = get_completion_args()
+            args = get_completion_args(model=settings.title_model)
             args["extra_body"] = {"enable_thinking": False}
 
             response = await litellm.acompletion(
@@ -111,7 +111,7 @@ class AgentExecutor:
                 "content": str(result),
             })
 
-    async def run(self, query: str) -> AsyncGenerator[Any, None]:
+    async def run(self, query: str, model_name: str) -> AsyncGenerator[Any, None]:
         await self._load_state()
 
         title_task = asyncio.create_task(self._generate_title(query))
@@ -127,7 +127,7 @@ class AgentExecutor:
         self.state["current_user_query"] = query
         self.state["chat_history"].append({"role": "user", "content": formatted_query})
 
-        completion_args = get_completion_args()
+        completion_args = get_completion_args(model=model_name)
         function_calls = 0
         final_response_content = ""
 
