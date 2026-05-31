@@ -1,14 +1,21 @@
 import asyncio
 import logging
 from enum import Enum
-from typing import Any, Dict, Optional, Set
+from typing import Dict, Optional, Set
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError, model_validator
 
 from models import AVAILABLE_MODELS
 from storage import chat_storage
-from workflow import AgentExecutor, ContentEvent, ThoughtEvent, ToolCallEvent
+from workflow import (
+    AgentExecutor,
+    ContentEvent,
+    ErrorEvent,
+    FinalResponseEvent,
+    ThoughtEvent,
+    ToolCallEvent,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -93,7 +100,7 @@ async def generate_title(session_id: str, query: str, conn: ConnectionManager):
         if await chat_storage.get_title(session_id) not in (None, "New Chat"):
             return
         active_title_generations.add(session_id)
-        title = await AgentExecutor(session_id).generate_title(query)
+        title = await AgentExecutor(session_id).get_title(query)
         if not title:
             return
         await conn.send(
@@ -110,7 +117,6 @@ async def generate_title(session_id: str, query: str, conn: ConnectionManager):
 
 
 async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
-    # payload is already validated by Pydantic
     conn.spawn_task(generate_title(payload.session_id, payload.content, conn))
 
     cancel_event = conn.get_cancel_event(payload.session_id)
@@ -125,7 +131,7 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
         ):
             if cancel_event.is_set():
                 logger.info(f"Session {payload.session_id} cancelled.")
-                return # Exit early on cancellation
+                return  # Exit early on cancellation
 
             match event:
                 case ThoughtEvent(thought=t):
@@ -152,6 +158,10 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
                             "content": c,
                         }
                     )
+                case FinalResponseEvent(content=c):
+                    final_response = c
+                case ErrorEvent(error=e):
+                    await conn.send_error(e, payload.session_id)
                 case str(content):
                     final_response = content
 

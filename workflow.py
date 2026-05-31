@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -8,7 +7,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import litellm
 from pydantic import BaseModel
 
-from agent import get_completion_args, get_tools
+from agent import execute_tool, get_completion_args, get_tools_schema
 from config import settings
 from prompts import (
     STARTING_PROMPT_TEMPLATE,
@@ -19,8 +18,6 @@ from storage import chat_storage
 
 logger = logging.getLogger(__name__)
 
-MAX_FUNCTION_CALLS = 10
-
 
 class ThoughtEvent(BaseModel):
     thought: str
@@ -30,21 +27,34 @@ class ContentEvent(BaseModel):
     content: str
 
 
+class ToolCallFunction(BaseModel):
+    name: str = ""
+    arguments: str = ""
+
+
+class ToolCall(BaseModel):
+    id: Optional[str] = None
+    type: str = "function"
+    function: ToolCallFunction
+
+
 class ToolCallEvent(BaseModel):
     tool_name: str
     tool_kwargs: dict
+
+
+class ErrorEvent(BaseModel):
+    error: str
+
+
+class FinalResponseEvent(BaseModel):
+    content: str
 
 
 class AgentExecutor:
     def __init__(self, session_id: str):
         self.session_id = session_id
         self.state: Dict[str, Any] = {}
-        self.tools = get_tools()
-        self.tool_map = {tool.__name__: tool for tool in self.tools}
-        self.litellm_tools = [
-            {"type": "function", "function": litellm.utils.function_to_dict(tool)}
-            for tool in self.tools
-        ]
 
     async def _load_state(self):
         self.state = await chat_storage.load_context(self.session_id)
@@ -57,21 +67,12 @@ class AgentExecutor:
     async def _save_state(self):
         await chat_storage.save_context(self.session_id, self.state)
 
-    async def generate_title(self, query: str) -> Optional[str]:
-        existing_title = await chat_storage.get_title(self.session_id)
-        if existing_title:
-            logger.info(
-                f"Using existing title for session {self.session_id}: {existing_title}"
-            )
-            return existing_title
-
+    async def _generate_title(self, query: str) -> Optional[str]:
         try:
             logger.info(f"Generating new title for session {self.session_id}...")
             title_prompt = TITLE_SUMMARIZER_PROMPT_TEMPLATE.format(query=query)
             args = get_completion_args(model=settings.title_model)
             args["extra_body"] = {"enable_thinking": False}
-            args["max_tokens"] = 50
-
             response = await litellm.acompletion(
                 **args,
                 messages=[{"role": "user", "content": title_prompt}],
@@ -84,41 +85,22 @@ class AgentExecutor:
             logger.exception(f"Failed to generate title for session {self.session_id}")
             return None
 
-    async def _execute_tool_calls(
-        self, tool_calls: List[Dict[str, Any]]
-    ) -> AsyncGenerator[ToolCallEvent, None]:
-        for tc in tool_calls:
-            tool_name = tc["function"]["name"]
-            tool_args = json.loads(tc["function"]["arguments"])
-
-            yield ToolCallEvent(tool_name=tool_name, tool_kwargs=tool_args)
-
-            tool_fn = self.tool_map.get(tool_name)
-            if not tool_fn:
-                result = f"Tool {tool_name} not found."
-            else:
-                try:
-                    import inspect
-
-                    if inspect.iscoroutinefunction(tool_fn):
-                        result = await tool_fn(**tool_args)
-                    else:
-                        result = tool_fn(**tool_args)
-                except Exception as e:
-                    logger.exception(f"Error executing tool {tool_name}")
-                    result = f"Error executing tool {tool_name}: {e}"
-
-            self.state["chat_history"].append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "name": tool_name,
-                    "content": str(result),
-                }
+    async def get_title(self, query: str) -> Optional[str]:
+        existing_title = await chat_storage.get_title(self.session_id)
+        if existing_title:
+            logger.info(
+                f"Using existing title for session {self.session_id}: {existing_title}"
             )
+            return existing_title
+        logger.info(
+            f"Generating new title for session {self.session_id} based on query: {query}"
+        )
+        return await self._generate_title(query)
 
     async def run(self, query: str, model_name: str) -> AsyncGenerator[Any, None]:
         await self._load_state()
+        self.state["chat_history"].append({"role": "user", "content": query})
+        await self._save_state()
 
         prompt_tmpl = RichPromptTemplate(STARTING_PROMPT_TEMPLATE)
         formatted_query = prompt_tmpl.format(
@@ -127,28 +109,37 @@ class AgentExecutor:
             current_pid=os.getpid(),
             current_date=datetime.now().strftime("%A, %B %d, %Y"),
         )
-        self.state["current_user_query"] = query
-        self.state["chat_history"].append({"role": "user", "content": formatted_query})
-        await self._save_state()
-
         completion_args = get_completion_args(model=model_name)
-        function_calls = 0
-        final_response_content = ""
+        completion_args["tools"] = get_tools_schema()
+        completion_args["tool_choice"] = "auto"
+
+        final_content = ""
 
         try:
-            while function_calls < MAX_FUNCTION_CALLS:
+            while True:
+                api_messages = self.state["chat_history"].copy()
+                # Inject the formatted prompt into the most recent user message for the API call
+                for i in reversed(range(len(api_messages))):
+                    if api_messages[i]["role"] == "user":
+                        api_messages[i] = {
+                            **api_messages[i],
+                            "content": formatted_query,
+                        }
+                        break
+
                 response = await litellm.acompletion(
                     **completion_args,
-                    messages=self.state["chat_history"],
-                    tools=self.litellm_tools,
+                    messages=api_messages,
                     stream=True,
                 )
 
-                current_content, current_thought, tool_calls = "", "", []
+                current_content, current_thought = "", ""
+                tool_calls: List[ToolCall] = []
 
                 async for chunk in response:
                     delta = chunk.choices[0].delta
 
+                    # Handle Thinking
                     thought = getattr(delta, "reasoning_content", None) or getattr(
                         delta, "reasoning", None
                     )
@@ -156,63 +147,74 @@ class AgentExecutor:
                         current_thought += thought
                         yield ThoughtEvent(thought=thought)
 
+                    # Handle Content
                     if delta.content:
                         current_content += delta.content
                         yield ContentEvent(content=delta.content)
 
+                    # Handle Tool Calls
                     if delta.tool_calls:
-                        for tc_delta in delta.tool_calls:
-                            if len(tool_calls) <= tc_delta.index:
-                                tool_calls.append(
-                                    {
-                                        "id": tc_delta.id,
-                                        "type": "function",
-                                        "function": {"name": "", "arguments": ""},
-                                    }
-                                )
+                        for tc in delta.tool_calls:
+                            index = tc.index
+                            while len(tool_calls) <= index:
+                                tool_calls.append(ToolCall(function=ToolCallFunction()))
 
-                            tc = tool_calls[tc_delta.index]
-                            if tc_delta.id:
-                                tc["id"] = tc_delta.id
-                            if tc_delta.function.name:
-                                tc["function"]["name"] += tc_delta.function.name
-                            if tc_delta.function.arguments:
-                                tc["function"]["arguments"] += (
-                                    tc_delta.function.arguments
-                                )
+                            target = tool_calls[index]
+                            if tc.id:
+                                target.id = tc.id
+                            if tc.function.name:
+                                target.function.name += tc.function.name
+                            if tc.function.arguments:
+                                target.function.arguments += tc.function.arguments
 
                 assistant_msg = {"role": "assistant", "content": current_content}
                 if current_thought:
                     assistant_msg["thought"] = current_thought
+
                 if tool_calls:
-                    assistant_msg["tool_calls"] = tool_calls
+                    tool_calls_dict = [tc.model_dump() for tc in tool_calls]
+                    assistant_msg["tool_calls"] = tool_calls_dict
+                    self.state["chat_history"].append(assistant_msg)
 
-                self.state["chat_history"].append(assistant_msg)
-                final_response_content = current_content
+                    for tc in tool_calls:
+                        name = tc.function.name
+                        args_str = tc.function.arguments
+                        try:
+                            args = json.loads(args_str) if args_str else {}
+                        except json.JSONDecodeError:
+                            args = {}
 
-                if not tool_calls:
+                        yield ToolCallEvent(tool_name=name, tool_kwargs=args)
+
+                        result = execute_tool(name, args)
+                        self.state["chat_history"].append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "name": name,
+                                "content": result,
+                            }
+                        )
+                    await self._save_state()
+                    continue
+                else:
+                    self.state["chat_history"].append(assistant_msg)
+                    final_content = current_content
                     break
 
-                async for event in self._execute_tool_calls(tool_calls):
-                    yield event
-                    function_calls += 1
+        except Exception as e:
+            logger.exception("Critical error during agent execution.")
+            yield ErrorEvent(error=str(e))
         finally:
-            if "current_user_query" in self.state:
-                for msg in reversed(self.state["chat_history"]):
-                    if msg["role"] == "user":
-                        msg["content"] = self.state["current_user_query"]
-                        break
-                del self.state["current_user_query"]
-
             await self._save_state()
 
-        yield final_response_content
+        yield FinalResponseEvent(content=final_content)
 
     async def get_history(self) -> List[Dict[str, Any]]:
         await self._load_state()
         history = []
         for msg in self.state.get("chat_history", []):
-            if msg["role"] == "tool":
+            if msg["role"] not in ("user", "assistant"):
                 continue
 
             item = {
@@ -220,7 +222,5 @@ class AgentExecutor:
                 "content": msg.get("content", ""),
                 "thought": msg.get("thought") or None,
             }
-            if msg["role"] == "assistant" and (tcs := msg.get("tool_calls")):
-                item["tool_calls"] = [{"name": tc["function"]["name"]} for tc in tcs]
             history.append(item)
         return history
