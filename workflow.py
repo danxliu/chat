@@ -12,7 +12,6 @@ from config import settings
 from prompts import (
     STARTING_PROMPT_TEMPLATE,
     TITLE_SUMMARIZER_PROMPT_TEMPLATE,
-    RichPromptTemplate,
 )
 from storage import chat_storage
 
@@ -102,8 +101,7 @@ class AgentExecutor:
         self.state["chat_history"].append({"role": "user", "content": query})
         await self._save_state()
 
-        prompt_tmpl = RichPromptTemplate(STARTING_PROMPT_TEMPLATE)
-        formatted_query = prompt_tmpl.format(
+        formatted_query = STARTING_PROMPT_TEMPLATE.format(
             query=query,
             current_date=datetime.now().strftime("%A, %B %d, %Y"),
         )
