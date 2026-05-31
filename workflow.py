@@ -65,12 +65,15 @@ class AgentExecutor:
     async def _generate_title(self, query: str):
         existing_title = await chat_storage.get_title(self.session_id)
         if existing_title:
+            logger.info(f"Using existing title for session {self.session_id}: {existing_title}")
             return existing_title
 
         try:
+            logger.info(f"Generating new title for session {self.session_id}...")
             title_prompt = TITLE_SUMMARIZER_PROMPT_TEMPLATE.format(query=query)
             args = get_completion_args(model=settings.title_model)
             args["extra_body"] = {"enable_thinking": False}
+            args["max_tokens"] = 20
 
             response = await litellm.acompletion(
                 **args,
@@ -78,6 +81,7 @@ class AgentExecutor:
             )
             title = response.choices[0].message.content.strip().replace('"', "")
             await chat_storage.save_title(self.session_id, title)
+            logger.info(f"Generated title for session {self.session_id}: {title}")
             return title
         except Exception:
             logger.exception(f"Failed to generate title for session {self.session_id}")
@@ -197,6 +201,10 @@ class AgentExecutor:
                     msg["content"] = self.state["current_user_query"]
                     break
             del self.state["current_user_query"]
+
+        if not title_yielded:
+            if title := await title_task:
+                yield TitleEvent(title=title)
 
         await self._save_state()
         yield final_response_content
