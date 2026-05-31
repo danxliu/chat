@@ -1,7 +1,6 @@
 import asyncio
-import os
 import uuid
-import json
+import logging
 from enum import Enum
 from typing import Dict, Any, Callable, Awaitable
 
@@ -19,14 +18,18 @@ from workflow import (
 )
 from storage import chat_storage
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 app = FastAPI()
 
-# Mount the static directory to serve frontend assets
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 class MessageType(str, Enum):
-    # Active Chat Loop
     MESSAGE = "message"
     THINKING = "thinking"
     CONTENT_CHUNK = "content_chunk"
@@ -45,7 +48,6 @@ async def get_index():
 @app.post("/api/chats")
 async def create_chat():
     session_id = str(uuid.uuid4())
-    # State is initialized on first use in AgentExecutor, or we can save an empty one
     await chat_storage.save_context(session_id, {
         "chat_history": [],
         "metadata": {"session_id": session_id},
@@ -87,7 +89,6 @@ async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_e
         
     executor = AgentExecutor(session_id)
     
-    # Setup cancellation event for this session
     if session_id not in cancel_events:
         cancel_events[session_id] = asyncio.Event()
     cancel_events[session_id].clear()
@@ -97,36 +98,37 @@ async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_e
         
         final_response = ""
         async for event in handler:
-            if isinstance(event, ThoughtEvent):
-                await websocket.send_json({
-                    "type": MessageType.THINKING,
-                    "session_id": session_id,
-                    "data": {"type": "thought", "content": event.thought}
-                })
-            elif isinstance(event, ToolCallEvent):
-                await websocket.send_json({
-                    "type": MessageType.THINKING,
-                    "session_id": session_id,
-                    "data": {
-                        "type": "tool_call",
-                        "tool": event.tool_name,
-                        "args": event.tool_kwargs
-                    }
-                })
-            elif isinstance(event, ContentEvent):
-                await websocket.send_json({
-                    "type": MessageType.CONTENT_CHUNK,
-                    "session_id": session_id,
-                    "content": event.content
-                })
-            elif isinstance(event, TitleEvent):
-                await websocket.send_json({
-                    "type": MessageType.TITLE_UPDATE,
-                    "session_id": session_id,
-                    "title": event.title
-                })
-            elif isinstance(event, str):
-                final_response = event
+            match event:
+                case ThoughtEvent(thought=thought):
+                    await websocket.send_json({
+                        "type": MessageType.THINKING,
+                        "session_id": session_id,
+                        "data": {"type": "thought", "content": thought}
+                    })
+                case ToolCallEvent(tool_name=name, tool_kwargs=kwargs):
+                    await websocket.send_json({
+                        "type": MessageType.THINKING,
+                        "session_id": session_id,
+                        "data": {
+                            "type": "tool_call",
+                            "tool": name,
+                            "args": kwargs
+                        }
+                    })
+                case ContentEvent(content=content):
+                    await websocket.send_json({
+                        "type": MessageType.CONTENT_CHUNK,
+                        "session_id": session_id,
+                        "content": content
+                    })
+                case TitleEvent(title=title):
+                    await websocket.send_json({
+                        "type": MessageType.TITLE_UPDATE,
+                        "session_id": session_id,
+                        "title": title
+                    })
+                case str(content):
+                    final_response = content
         
         await websocket.send_json({
             "type": MessageType.MESSAGE,
@@ -134,8 +136,7 @@ async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_e
             "content": final_response
         })
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error handling message")
         await websocket.send_json({"type": MessageType.ERROR, "session_id": session_id, "message": str(e)})
 
 
@@ -152,7 +153,7 @@ async def handle_cancel(payload: Dict[str, Any], cancel_events: Dict[str, asynci
 @app.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("Persistent WebSocket connection established")
+    logger.info("WebSocket connection established")
 
     cancel_events: Dict[str, asyncio.Event] = {}
 
@@ -166,8 +167,7 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             await h(**kwargs)
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logger.exception("Handler error")
             try:
                 await websocket.send_json({
                     "type": MessageType.ERROR,
@@ -184,17 +184,15 @@ async def websocket_endpoint(websocket: WebSocket):
             handler = dispatcher.get(msg_type)
             
             if handler:
-                # Run handler as a task to allow concurrent processing
                 asyncio.create_task(run_handler(handler, payload=data, websocket=websocket, cancel_events=cancel_events))
             else:
-                print(f"Unknown message type: {msg_type}")
+                logger.warning(f"Unknown message type: {msg_type}")
                 await websocket.send_json({"type": MessageType.ERROR, "message": f"Unknown message type: {msg_type}"})
 
     except WebSocketDisconnect:
-        print("WebSocket client disconnected")
+        logger.info("WebSocket client disconnected")
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("WebSocket error")
         try:
             await websocket.send_json({"type": MessageType.ERROR, "message": str(e)})
         except:

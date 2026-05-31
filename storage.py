@@ -44,12 +44,10 @@ class ChatStorage:
         ]
 
     async def delete_context(self, session_id: str) -> None:
-        """Deletes the session context and title from Redis."""
         await self.client.delete(self._get_key(session_id))
         await self.client.hdel("agent_titles", session_id)
 
     async def clear_all(self) -> None:
-        """Deletes all session contexts and titles from Redis."""
         keys = await self.client.keys("agent_context:*")
         if keys:
             await self.client.delete(*keys)
