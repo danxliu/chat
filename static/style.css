@@ -1,14 +1,15 @@
-@import url('colors.css');
+@import url("colors.css");
 
 @font-face {
-    font-family: 'Material Symbols Rounded';
+    font-family: "Material Symbols Rounded";
     font-style: normal;
     font-weight: 100 700;
-    src: url('assets/MaterialSymbolsRounded_Filled-Medium.ttf') format('truetype');
+    src: url("assets/MaterialSymbolsRounded_Filled-Medium.ttf")
+        format("truetype");
 }
 
 .material-icons {
-    font-family: 'Material Symbols Rounded';
+    font-family: "Material Symbols Rounded";
     font-weight: normal;
     font-style: normal;
     font-size: 24px;
@@ -19,7 +20,7 @@
     white-space: nowrap;
     word-wrap: normal;
     direction: ltr;
-    -webkit-font-feature-settings: 'liga';
+    -webkit-font-feature-settings: "liga";
     -webkit-font-smoothing: antialiased;
 }
 
@@ -28,7 +29,7 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     display: flex;
     height: 100vh;
     margin: 0;
@@ -139,7 +140,9 @@ body {
     align-items: center;
     justify-content: center;
     opacity: 0;
-    transition: opacity 0.2s, color 0.2s;
+    transition:
+        opacity 0.2s,
+        color 0.2s;
 }
 
 .session-item:hover .delete-session {
@@ -264,7 +267,6 @@ body {
     background-color: var(--surface-hover);
 }
 
-
 #send-button:hover {
     opacity: 0.9;
 }
@@ -278,7 +280,6 @@ body {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 10px;
     width: 100%;
 }
 
@@ -342,17 +343,23 @@ body {
 }
 
 .dots span:nth-child(2) {
-    animation-delay: .2s;
+    animation-delay: 0.2s;
 }
 
 .dots span:nth-child(3) {
-    animation-delay: .4s;
+    animation-delay: 0.4s;
 }
 
 @keyframes blink {
-    0% { opacity: .2; }
-    20% { opacity: 1; }
-    100% { opacity: .2; }
+    0% {
+        opacity: 0.2;
+    }
+    20% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0.2;
+    }
 }
 
 /* Markdown styling */
@@ -365,7 +372,7 @@ body {
 }
 
 .assistant-message code {
-    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-family: "Cascadia Code", "Consolas", monospace;
     font-size: 0.9em;
     background-color: var(--bg-color);
     padding: 2px 4px;
@@ -373,8 +380,12 @@ body {
 }
 
 .assistant-message p {
-    margin: 8px 0;
+    margin: 4px 0;
 }
 
-.assistant-message p:first-child { margin-top: 0; }
-.assistant-message p:last-child { margin-bottom: 0; }
+.assistant-message p:first-child {
+    margin-top: 0;
+}
+.assistant-message p:last-child {
+    margin-bottom: 0;
+}
