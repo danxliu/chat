@@ -1,24 +1,20 @@
 import asyncio
 import logging
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, Set
+from typing import Any, Dict, Optional, Set
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, ValidationError, model_validator
 
-from storage import chat_storage
 from models import AVAILABLE_MODELS
-from workflow import (
-    AgentExecutor,
-    ContentEvent,
-    ThoughtEvent,
-    ToolCallEvent,
-)
+from storage import chat_storage
+from workflow import AgentExecutor, ContentEvent, ThoughtEvent, ToolCallEvent
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 active_title_generations: Set[str] = set()
+
 
 class MessageType(str, Enum):
     MESSAGE = "message"
@@ -30,178 +26,176 @@ class MessageType(str, Enum):
     CANCEL = "cancel"
     ERROR = "error"
 
-async def generate_title(session_id: str, query: str, websocket: WebSocket):
+
+class IncomingPayload(BaseModel):
+    type: MessageType
+    session_id: Optional[str] = None
+    content: Optional[str] = None
+    model: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> "IncomingPayload":
+        if self.type == MessageType.MESSAGE:
+            if not self.session_id:
+                raise ValueError("Missing session_id")
+            if not self.content:
+                raise ValueError("Missing content")
+            if not self.model:
+                raise ValueError("Missing model selection")
+            if not AVAILABLE_MODELS:
+                raise ValueError("No models available on the server")
+            if self.model not in AVAILABLE_MODELS:
+                raise ValueError(f"Invalid model: {self.model}")
+        return self
+
+
+class ConnectionManager:
+    def __init__(self, websocket: WebSocket):
+        self.ws = websocket
+        self._lock = asyncio.Lock()
+        self.tasks: Set[asyncio.Task] = set()
+        self.cancel_events: Dict[str, asyncio.Event] = {}
+
+    async def send(self, payload: dict):
+        async with self._lock:
+            await self.ws.send_json(payload)
+
+    async def send_error(self, message: str, session_id: str | None = None):
+        await self.send(
+            {
+                "type": MessageType.ERROR.value,
+                "session_id": session_id,
+                "message": message,
+            }
+        )
+
+    def spawn_task(self, coro):
+        task = asyncio.create_task(coro)
+        self.tasks.add(task)
+        task.add_done_callback(self.tasks.discard)
+
+    def get_cancel_event(self, session_id: str) -> asyncio.Event:
+        if session_id not in self.cancel_events:
+            self.cancel_events[session_id] = asyncio.Event()
+        return self.cancel_events[session_id]
+
+    def cleanup(self):
+        for event in self.cancel_events.values():
+            event.set()
+        for task in self.tasks:
+            task.cancel()
+
+
+async def generate_title(session_id: str, query: str, conn: ConnectionManager):
     if session_id in active_title_generations:
         return
-
-    existing_title = await chat_storage.get_title(session_id)
-    if existing_title and existing_title != "New Chat":
-        return
-
-    active_title_generations.add(session_id)
     try:
-        executor = AgentExecutor(session_id)
-        title = await executor.generate_title(query)
-        if title:
-            await websocket.send_json(
-                {
-                    "type": MessageType.TITLE_UPDATE,
-                    "session_id": session_id,
-                    "title": title,
-                }
-            )
+        if await chat_storage.get_title(session_id) not in (None, "New Chat"):
+            return
+        active_title_generations.add(session_id)
+        title = await AgentExecutor(session_id).generate_title(query)
+        if not title:
+            return
+        await conn.send(
+            {
+                "type": MessageType.TITLE_UPDATE.value,
+                "session_id": session_id,
+                "title": title,
+            }
+        )
     except Exception:
-        logger.exception(f"Failed to generate title for session {session_id}")
+        logger.exception(f"Failed title generation for {session_id}")
     finally:
         active_title_generations.discard(session_id)
 
-async def handle_message(
-    payload: Dict[str, Any],
-    websocket: WebSocket,
-    cancel_events: Dict[str, asyncio.Event],
-):
-    session_id = payload.get("session_id")
-    user_msg = payload.get("content")
-    model_name = payload.get("model")
 
-    if not session_id or not user_msg:
-        return
+async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
+    # payload is already validated by Pydantic
+    conn.spawn_task(generate_title(payload.session_id, payload.content, conn))
 
-    if not model_name or (AVAILABLE_MODELS and model_name not in AVAILABLE_MODELS):
-        await websocket.send_json(
-            {
-                "type": MessageType.ERROR,
-                "session_id": session_id,
-                "message": f"Invalid or missing model: {model_name}",
-            }
-        )
-        return
-
-    executor = AgentExecutor(session_id)
-
-    if session_id not in cancel_events:
-        cancel_events[session_id] = asyncio.Event()
-    cancel_events[session_id].clear()
-    asyncio.create_task(generate_title(session_id, user_msg, websocket))
+    cancel_event = conn.get_cancel_event(payload.session_id)
+    cancel_event.clear()
 
     try:
-        handler = executor.run(query=user_msg, model_name=model_name)
-
+        executor = AgentExecutor(payload.session_id)
         final_response = ""
-        async for event in handler:
-            if session_id in cancel_events and cancel_events[session_id].is_set():
-                logger.info(f"Cancellation requested for session {session_id}")
-                break
+
+        async for event in executor.run(
+            query=payload.content, model_name=payload.model
+        ):
+            if cancel_event.is_set():
+                logger.info(f"Session {payload.session_id} cancelled.")
+                return # Exit early on cancellation
 
             match event:
-                case ThoughtEvent(thought=thought):
-                    await websocket.send_json(
+                case ThoughtEvent(thought=t):
+                    await conn.send(
                         {
-                            "type": MessageType.THINKING,
-                            "session_id": session_id,
-                            "data": {"type": "thought", "content": thought},
+                            "type": MessageType.THINKING.value,
+                            "session_id": payload.session_id,
+                            "data": {"type": "thought", "content": t},
                         }
                     )
-                case ToolCallEvent(tool_name=name, tool_kwargs=kwargs):
-                    await websocket.send_json(
+                case ToolCallEvent(tool_name=n, tool_kwargs=k):
+                    await conn.send(
                         {
-                            "type": MessageType.THINKING,
-                            "session_id": session_id,
-                            "data": {"type": "tool_call", "tool": name, "args": kwargs},
+                            "type": MessageType.THINKING.value,
+                            "session_id": payload.session_id,
+                            "data": {"type": "tool_call", "tool": n, "args": k},
                         }
                     )
-                case ContentEvent(content=content):
-                    await websocket.send_json(
+                case ContentEvent(content=c):
+                    await conn.send(
                         {
-                            "type": MessageType.CONTENT_CHUNK,
-                            "session_id": session_id,
-                            "content": content,
+                            "type": MessageType.CONTENT_CHUNK.value,
+                            "session_id": payload.session_id,
+                            "content": c,
                         }
                     )
                 case str(content):
                     final_response = content
 
-        await websocket.send_json(
+        await conn.send(
             {
-                "type": MessageType.MESSAGE,
-                "session_id": session_id,
+                "type": MessageType.MESSAGE.value,
+                "session_id": payload.session_id,
                 "content": final_response,
             }
         )
+
     except Exception as e:
-        logger.exception("Error handling message")
-        await websocket.send_json(
-            {"type": MessageType.ERROR, "session_id": session_id, "message": str(e)}
-        )
+        logger.exception("Error during chat processing")
+        await conn.send_error(str(e), payload.session_id)
+    finally:
+        conn.cancel_events.pop(payload.session_id, None)
 
-async def handle_ping(payload: Dict[str, Any], websocket: WebSocket, **kwargs):
-    await websocket.send_json({"type": MessageType.PONG})
-
-async def handle_cancel(
-    payload: Dict[str, Any], cancel_events: Dict[str, asyncio.Event], **kwargs
-):
-    session_id = payload.get("session_id")
-    if session_id and session_id in cancel_events:
-        cancel_events[session_id].set()
 
 @router.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    logger.info("WebSocket connection established")
-
-    cancel_events: Dict[str, asyncio.Event] = {}
-
-    dispatcher: Dict[MessageType, Callable[..., Awaitable[None]]] = {
-        MessageType.MESSAGE: handle_message,
-        MessageType.PING: handle_ping,
-        MessageType.CANCEL: handle_cancel,
-    }
-
-    async def run_handler(h: Callable[..., Awaitable[None]], **kwargs):
-        try:
-            await h(**kwargs)
-        except Exception as e:
-            logger.exception("Handler error")
-            try:
-                await websocket.send_json(
-                    {
-                        "type": MessageType.ERROR,
-                        "session_id": kwargs.get("payload", {}).get("session_id"),
-                        "message": f"Handler error: {str(e)}",
-                    }
-                )
-            except:
-                pass
+    conn = ConnectionManager(websocket)
 
     try:
         while True:
-            data = await websocket.receive_json()
-            msg_type = data.get("type")
-            handler = dispatcher.get(msg_type)
+            raw_data = await websocket.receive_json()
 
-            if handler:
-                asyncio.create_task(
-                    run_handler(
-                        handler,
-                        payload=data,
-                        websocket=websocket,
-                        cancel_events=cancel_events,
-                    )
-                )
-            else:
-                logger.warning(f"Unknown message type: {msg_type}")
-                await websocket.send_json(
-                    {
-                        "type": MessageType.ERROR,
-                        "message": f"Unknown message type: {msg_type}",
-                    }
-                )
+            try:
+                payload = IncomingPayload(**raw_data)
+            except ValidationError as e:
+                await conn.send_error(f"Invalid payload: {e.errors()[0]['msg']}")
+                continue
+            match payload.type:
+                case MessageType.PING:
+                    await conn.send({"type": MessageType.PONG.value})
+                case MessageType.CANCEL:
+                    if payload.session_id:
+                        conn.get_cancel_event(payload.session_id).set()
+                case MessageType.MESSAGE:
+                    conn.spawn_task(process_chat(payload, conn))
 
     except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected")
+        logger.info("Client disconnected")
     except Exception as e:
-        logger.exception("WebSocket error")
-        try:
-            await websocket.send_json({"type": MessageType.ERROR, "message": str(e)})
-        except:
-            pass
+        logger.exception(f"Unexpected error: {e}")
+    finally:
+        conn.cleanup()

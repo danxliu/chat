@@ -20,14 +20,15 @@ async def fetch_available_models():
             response.raise_for_status()
             data = response.json()
             models = [f"openai/{m['id']}" for m in data.get("data", [])]
+            
+            AVAILABLE_MODELS.clear()
             if models:
-                AVAILABLE_MODELS = models
+                AVAILABLE_MODELS.extend(models)
                 logger.info(
                     f"Successfully fetched {len(models)} models from {url}: {AVAILABLE_MODELS}"
                 )
             else:
                 logger.warning(f"No models found at {url}")
-                AVAILABLE_MODELS = []
     except Exception as e:
         logger.error(f"Failed to fetch models from {settings.api_base}: {e}")
-        AVAILABLE_MODELS = []
+        AVAILABLE_MODELS.clear()

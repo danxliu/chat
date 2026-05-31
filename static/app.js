@@ -68,7 +68,7 @@ async function init() {
 }
 
 async function loadModels() {
-  const response = await fetch("/api/models");
+  const response = await fetch("/api/chats/models");
   const data = await response.json();
   modelSelector.innerHTML = "";
   data.models.forEach((model) => {
