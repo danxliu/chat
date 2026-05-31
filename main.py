@@ -2,9 +2,11 @@ import asyncio
 import uuid
 import logging
 from enum import Enum
-from typing import Dict, Any, Callable, Awaitable, Set
+from typing import Dict, Any, Callable, Awaitable, Set, List
+from contextlib import asynccontextmanager
 
 import uvicorn
+import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,7 +26,40 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+AVAILABLE_MODELS: List[str] = []
+
+
+async def fetch_available_models():
+    """Fetch available models from the LLM server."""
+    global AVAILABLE_MODELS
+    try:
+        url = f"{settings.api_base}/models"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            # Expecting OpenAI-compatible format: {"data": [{"id": "model-id", ...}]}
+            models = [f"openai/{m['id']}" for m in data.get("data", [])]
+            if models:
+                AVAILABLE_MODELS = models
+                logger.info(f"Successfully fetched {len(models)} models from {url}: {AVAILABLE_MODELS}")
+            else:
+                logger.warning(f"No models found at {url}")
+                AVAILABLE_MODELS = []
+    except Exception as e:
+        logger.error(f"Failed to fetch models from {settings.api_base}: {e}")
+        AVAILABLE_MODELS = []
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Fetch models
+    await fetch_available_models()
+    yield
+    # Shutdown: No specific cleanup needed
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -65,7 +100,7 @@ async def list_chats():
 
 @app.get("/api/models")
 async def list_models():
-    return {"models": settings.models}
+    return {"models": AVAILABLE_MODELS}
 
 
 @app.get("/api/chats/{session_id}/history")
@@ -119,7 +154,7 @@ async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_e
     if not session_id or not user_msg:
         return
 
-    if not model_name or model_name not in settings.models:
+    if not model_name or (AVAILABLE_MODELS and model_name not in AVAILABLE_MODELS):
         await websocket.send_json({
             "type": MessageType.ERROR,
             "session_id": session_id,

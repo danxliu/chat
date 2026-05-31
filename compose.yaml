@@ -9,7 +9,6 @@ services:
       - REDIS_PORT=6379
       - API_BASE
       - API_KEY
-      - MODEL
       - TITLE_MODEL
       - MAX_TOKENS
       - TEMPERATURE
