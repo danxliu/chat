@@ -26,6 +26,12 @@
 
 * {
     box-sizing: border-box;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+    display: none;
 }
 
 body {
@@ -52,17 +58,15 @@ body {
     margin: 15px 0;
 }
 
-#new-chat {
+#new-chat, #clear-all {
     background-color: transparent;
     color: var(--text-primary);
     border: none;
     padding: 10px;
     border-radius: 6px;
     cursor: pointer;
-    font-weight: normal;
     display: flex;
     align-items: center;
-    justify-content: flex-start;
     gap: 10px;
     transition: background-color 0.2s;
     font-size: 0.9em;
@@ -73,24 +77,13 @@ body {
 }
 
 #clear-all {
-    background-color: rgba(255, 82, 82, 0.15);
+    background-color: rgba(255, 82, 82, 0.1);
     color: var(--accent-red);
-    border: none;
-    padding: 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: normal;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 10px;
-    transition: background-color 0.2s;
-    font-size: 0.9em;
     margin-top: auto;
 }
 
 #clear-all:hover {
-    background-color: rgba(255, 82, 82, 0.25);
+    background-color: rgba(255, 82, 82, 0.2);
 }
 
 #chat-list {
@@ -110,7 +103,6 @@ body {
     cursor: pointer;
     transition: background-color 0.2s;
     position: relative;
-    group: hover;
 }
 
 .session-item:hover {
@@ -140,9 +132,7 @@ body {
     align-items: center;
     justify-content: center;
     opacity: 0;
-    transition:
-        opacity 0.2s,
-        color 0.2s;
+    transition: all 0.2s;
 }
 
 .session-item:hover .delete-session {
@@ -196,8 +186,6 @@ body {
 .assistant-message {
     align-self: stretch;
     max-width: 100%;
-    background-color: transparent;
-    border: none;
     padding: 12px 0;
 }
 
@@ -220,7 +208,6 @@ body {
     font-size: 1em;
     outline: none;
     resize: none;
-    overflow-y: hidden;
     max-height: 200px;
     font-family: inherit;
     line-height: 1.5;
@@ -277,14 +264,6 @@ body {
     background-color: var(--surface-hover);
 }
 
-#send-button:hover {
-    opacity: 0.9;
-}
-
-#thinking-indicator {
-    align-self: flex-start;
-}
-
 .assistant-thinking-container {
     align-self: flex-start;
     display: flex;
@@ -305,29 +284,13 @@ body {
     align-items: center;
     gap: 4px;
     width: fit-content;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.2s;
     outline: none;
 }
 
-.thinking-button:hover {
+.thinking-button:hover, .thinking-button.expanded, .thinking-button.finalized:hover {
     background: var(--surface-hover);
     color: var(--text-primary);
-    border-color: var(--border-color);
-}
-
-.thinking-button.expanded {
-    background: var(--surface-active);
-    color: var(--text-primary);
-    border-color: var(--border-color);
-}
-
-.thinking-button.finalized {
-    cursor: pointer;
-    font-style: normal;
-}
-
-.thinking-button.finalized:hover {
-    background: var(--surface-hover);
     border-color: var(--border-color);
 }
 
@@ -336,14 +299,13 @@ body {
     color: var(--text-secondary);
     max-height: 400px;
     overflow-y: auto;
-    white-space: pre-wrap;
     width: 100%;
     max-width: 800px;
     padding: 4px 0;
 }
 
 .tool-call {
-    margin: 4px 0;
+    margin: 8px 0;
     color: var(--text-primary);
     font-size: 0.9em;
 }
@@ -361,27 +323,22 @@ body {
 }
 
 @keyframes blink {
-    0% {
-        opacity: 0.2;
-    }
-    20% {
-        opacity: 1;
-    }
-    100% {
-        opacity: 0.2;
-    }
+    0% { opacity: 0.2; }
+    20% { opacity: 1; }
+    100% { opacity: 0.2; }
 }
 
 /* Markdown styling */
-.assistant-message pre {
+.assistant-message pre, .thought-log pre {
     background-color: var(--bg-color);
     padding: 10px;
     border-radius: 6px;
     overflow-x: auto;
     border: 1px solid var(--border-color);
+    margin: 8px 0;
 }
 
-.assistant-message code {
+.assistant-message code, .thought-log code {
     font-family: "Cascadia Code", "Consolas", monospace;
     font-size: 0.9em;
     background-color: var(--bg-color);
@@ -389,13 +346,9 @@ body {
     border-radius: 4px;
 }
 
-.assistant-message p {
-    margin: 4px 0;
+.assistant-message p, .thought-log p {
+    margin: 8px 0;
 }
 
-.assistant-message p:first-child {
-    margin-top: 0;
-}
-.assistant-message p:last-child {
-    margin-bottom: 0;
-}
+.assistant-message *:first-child, .thought-log *:first-child { margin-top: 0; }
+.assistant-message *:last-child, .thought-log *:last-child { margin-bottom: 0; }

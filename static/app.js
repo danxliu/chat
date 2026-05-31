@@ -34,6 +34,7 @@ const messageHandlers = {
 
 let currentAssistantMessageDiv = null;
 let currentAssistantContent = "";
+let currentThought = "";
 
 // Configure marked to handle line breaks properly
 marked.setOptions({
@@ -192,6 +193,7 @@ async function switchSession(sessionId) {
   currentSessionId = sessionId;
   currentAssistantMessageDiv = null;
   currentAssistantContent = "";
+  currentThought = "";
   await loadHistory(sessionId);
   updateActiveSessionInList();
 }
@@ -332,12 +334,9 @@ function updateThinkingLog(data) {
 
   const logDiv = indicator.querySelector(".thought-log");
   if (data.type === "thought") {
-    logDiv.appendChild(document.createTextNode(data.content));
+    currentThought += data.content;
   } else if (data.type === "tool_call") {
-    const toolEl = document.createElement("div");
-    toolEl.className = "tool-call";
-    toolEl.innerHTML = `<strong>Tool Call:</strong> ${data.tool}\n\n`;
-    logDiv.appendChild(toolEl);
+    currentThought += `\n\n**Tool Call:** ${data.tool}\n\n`;
 
     // Update thinking button text
     const button = indicator.querySelector(".thinking-button");
@@ -345,6 +344,22 @@ function updateThinkingLog(data) {
       button.innerHTML = `Calling ${data.tool}<span class="dots"><span>.</span><span>.</span><span>.</span></span>`;
     }
   }
+
+  // Parse Markdown and sanitize
+  const rawHtml = marked.parse(currentThought);
+  const cleanHtml = DOMPurify.sanitize(rawHtml);
+  logDiv.innerHTML = cleanHtml;
+
+  // Render LaTeX
+  renderMathInElement(logDiv, {
+    delimiters: [
+      { left: "$$", right: "$$", display: true },
+      { left: "$", right: "$", display: false },
+      { left: "\\(", right: "\\)", display: false },
+      { left: "\\[", right: "\\]", display: true },
+    ],
+    throwOnError: false,
+  });
 
   // Auto scroll the log if it's visible
   if (logDiv.style.display !== "none") {
@@ -366,6 +381,7 @@ function handleErrorMessage(payload) {
 function showThinkingIndicator(text) {
   if (document.getElementById("thinking-indicator")) return;
 
+  currentThought = "";
   const container = document.createElement("div");
   container.id = "thinking-indicator";
   container.className = "assistant-thinking-container";
@@ -402,6 +418,7 @@ function finalizeThinkingIndicator() {
       button.innerHTML = "View Thought Process";
       button.classList.add("finalized");
     }
+    currentThought = "";
   }
 }
 
