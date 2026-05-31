@@ -12,7 +12,7 @@ The trajectory of the agent is stored in the file: {{ trajectory_file }}
 TITLE_SUMMARIZER_PROMPT_TEMPLATE = """
 Summarize the following user query into a concise, catchy chat title.
 The title should be between 3 to 5 words long.
-Do not use quotes or any introductory text. Just return the title itself.
+Output ONLY the title. Do not use quotes, punctuation at the end, or any introductory text.
 
 User Query: {query}
 """

@@ -1,6 +1,7 @@
 let socket = null;
 let currentSessionId = null;
 let pingInterval = null;
+let isGenerating = false;
 
 const chatContainer = document.getElementById("chat-container");
 const messagesDiv = document.getElementById("messages");
@@ -39,6 +40,17 @@ marked.setOptions({
   breaks: true,
   gfm: true,
 });
+
+function setGenerating(state) {
+  isGenerating = state;
+  if (isGenerating) {
+    sendButton.classList.add("stop-mode");
+    sendButton.innerHTML = '<span class="material-icons">stop</span>';
+  } else {
+    sendButton.classList.remove("stop-mode");
+    sendButton.innerHTML = '<span class="material-icons">send</span>';
+  }
+}
 
 async function init() {
   connectWebSocket();
@@ -240,6 +252,7 @@ function connectWebSocket() {
 
 function handleIncomingMessage(payload) {
   if (payload.session_id === currentSessionId) {
+    setGenerating(false);
     finalizeThinkingIndicator();
     if (currentAssistantMessageDiv) {
       // Just ensure final render is correct
@@ -344,6 +357,7 @@ function handlePong(payload) {}
 function handleErrorMessage(payload) {
   console.error("Server Error:", payload.message);
   if (!payload.session_id || payload.session_id === currentSessionId) {
+    setGenerating(false);
     finalizeThinkingIndicator();
     appendMessage("system", "Error: " + payload.message);
   }
@@ -426,6 +440,8 @@ function appendMessage(role, text) {
 }
 
 function sendMessage() {
+  if (isGenerating) return;
+
   const text = userInput.value.trim();
   const model = modelSelector.value;
   if (
@@ -435,6 +451,7 @@ function sendMessage() {
     socket.readyState === WebSocket.OPEN &&
     currentSessionId
   ) {
+    setGenerating(true);
     appendMessage("user", text);
     socket.send(
       JSON.stringify({
@@ -449,12 +466,37 @@ function sendMessage() {
   }
 }
 
-sendButton.addEventListener("click", sendMessage);
+function cancelMessage() {
+  if (
+    socket &&
+    socket.readyState === WebSocket.OPEN &&
+    currentSessionId &&
+    isGenerating
+  ) {
+    socket.send(
+      JSON.stringify({
+        type: MessageType.CANCEL,
+        session_id: currentSessionId,
+      }),
+    );
+    setGenerating(false);
+  }
+}
+
+sendButton.addEventListener("click", () => {
+  if (isGenerating) {
+    cancelMessage();
+  } else {
+    sendMessage();
+  }
+});
 
 userInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    sendMessage();
+    if (!isGenerating) {
+      sendMessage();
+    }
   }
 });
 

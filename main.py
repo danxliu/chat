@@ -2,7 +2,7 @@ import asyncio
 import uuid
 import logging
 from enum import Enum
-from typing import Dict, Any, Callable, Awaitable
+from typing import Dict, Any, Callable, Awaitable, Set
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -14,7 +14,6 @@ from workflow import (
     ThoughtEvent,
     ToolCallEvent,
     ContentEvent,
-    TitleEvent,
 )
 from storage import chat_storage
 from config import settings
@@ -28,6 +27,8 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+active_title_generations: Set[str] = set()
 
 
 class MessageType(str, Enum):
@@ -86,6 +87,30 @@ async def clear_all_chats():
     return {"status": "success"}
 
 
+async def generate_title(session_id: str, query: str, websocket: WebSocket):
+    if session_id in active_title_generations:
+        return
+
+    existing_title = await chat_storage.get_title(session_id)
+    if existing_title and existing_title != "New Chat":
+        return
+
+    active_title_generations.add(session_id)
+    try:
+        executor = AgentExecutor(session_id)
+        title = await executor.generate_title(query)
+        if title:
+            await websocket.send_json({
+                "type": MessageType.TITLE_UPDATE,
+                "session_id": session_id,
+                "title": title
+            })
+    except Exception:
+        logger.exception(f"Failed to generate title for session {session_id}")
+    finally:
+        active_title_generations.discard(session_id)
+
+
 async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_events: Dict[str, asyncio.Event]):
     session_id = payload.get("session_id")
     user_msg = payload.get("content")
@@ -107,12 +132,19 @@ async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_e
     if session_id not in cancel_events:
         cancel_events[session_id] = asyncio.Event()
     cancel_events[session_id].clear()
+
+    # Launch title generation in background
+    asyncio.create_task(generate_title(session_id, user_msg, websocket))
     
     try:
         handler = executor.run(query=user_msg, model_name=model_name)
         
         final_response = ""
         async for event in handler:
+            if session_id in cancel_events and cancel_events[session_id].is_set():
+                logger.info(f"Cancellation requested for session {session_id}")
+                break
+
             match event:
                 case ThoughtEvent(thought=thought):
                     await websocket.send_json({
@@ -135,12 +167,6 @@ async def handle_message(payload: Dict[str, Any], websocket: WebSocket, cancel_e
                         "type": MessageType.CONTENT_CHUNK,
                         "session_id": session_id,
                         "content": content
-                    })
-                case TitleEvent(title=title):
-                    await websocket.send_json({
-                        "type": MessageType.TITLE_UPDATE,
-                        "session_id": session_id,
-                        "title": title
                     })
                 case str(content):
                     final_response = content
