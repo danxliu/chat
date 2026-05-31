@@ -143,7 +143,7 @@ async function loadHistory(sessionId) {
   const response = await fetch(`/api/chats/${sessionId}/history`);
   const data = await response.json();
   messagesDiv.innerHTML = "";
-  
+
   let isThinkingOpen = false;
 
   data.history.forEach((msg, index) => {
@@ -170,7 +170,7 @@ async function loadHistory(sessionId) {
           });
         }
       }
-      
+
       if (msg.content) {
         if (isThinkingOpen) {
           finalizeThinkingIndicator();
@@ -178,7 +178,7 @@ async function loadHistory(sessionId) {
         }
         appendMessage("assistant", msg.content);
       }
-      
+
       // Finalize if it's the last message and still thinking
       if (index === data.history.length - 1 && isThinkingOpen) {
         finalizeThinkingIndicator();
@@ -342,7 +342,7 @@ function updateThinkingLog(data) {
     // Update thinking button text
     const button = indicator.querySelector(".thinking-button");
     if (button && !button.classList.contains("finalized")) {
-      button.innerHTML = `Calling \`${data.tool}\`<span class="dots"><span>.</span><span>.</span><span>.</span></span>`;
+      button.innerHTML = `Calling ${data.tool}<span class="dots"><span>.</span><span>.</span><span>.</span></span>`;
     }
   }
 
