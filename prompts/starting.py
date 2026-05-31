@@ -6,6 +6,7 @@ IMPORTANT_INSTRUCTIONS = """
     - Date: {{ current_date }}
     - Work Directory: {{ work_dir }}
     - Process PID: {{ current_pid }} (DO NOT terminate this process)
+- **Formatting:** When you output the dollar sign character ($), you MUST prefix it with a backslash (\$) to prevent LaTeX formatting issues in the UI (e.g., use \$100 instead of $100).
 """
 
 STARTING_PROMPT_TEMPLATE = IMPORTANT_INSTRUCTIONS + "\n\n# USER REQUEST\n{{ query }}"
