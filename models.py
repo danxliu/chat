@@ -18,14 +18,16 @@ async def fetch_available_models():
             response = await client.get(url)
             response.raise_for_status()
             data = response.json()
-            models = [f"openai/{m['id']}" for m in data.get("data", [])]
-
+            chat_models = [
+                f"openai/{m['id']}" for m in data.get("data", []) if "chat" in m["id"]
+            ]
             AVAILABLE_MODELS.clear()
-            if not models:
-                logger.warning(f"No models found at {url}")
-            AVAILABLE_MODELS.extend(models)
+            AVAILABLE_MODELS.extend(chat_models)
+
+            if not AVAILABLE_MODELS:
+                logger.warning(f"No chat models found at {url}")
             logger.info(
-                f"Successfully fetched {len(models)} models from {url}: {AVAILABLE_MODELS}"
+                f"Successfully fetched {len(AVAILABLE_MODELS)} chat models from {url}: {AVAILABLE_MODELS}"
             )
     except Exception as e:
         logger.error(f"Failed to fetch models from {settings.api_base}: {e}")

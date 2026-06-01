@@ -5,10 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "chromadb>=1.5.9",
     "ddgs>=9.14.1",
     "docker>=7.1.0",
     "fastapi>=0.136.3",
     "litellm>=1.86.2",
+    "mem0ai>=2.0.4",
     "numpydoc>=1.10.0",
     "pydantic>=2.13.3",
     "pydantic-settings>=2.14.0",

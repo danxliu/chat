@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from agent import execute_tool, get_completion_args, get_tools_schema
 from config import settings
+from memory import add_memory, search_memories
 from prompts import (
     STARTING_PROMPT_TEMPLATE,
     TITLE_SUMMARIZER_PROMPT_TEMPLATE,
@@ -71,10 +72,11 @@ class AgentExecutor:
             logger.info(f"Generating new title for session {self.session_id}...")
             title_prompt = TITLE_SUMMARIZER_PROMPT_TEMPLATE.format(query=query)
             args = get_completion_args(model=settings.title_model)
-            args["extra_body"] = {"enable_thinking": False}
             response = await litellm.acompletion(
                 **args,
                 messages=[{"role": "user", "content": title_prompt}],
+                max_tokens=20,
+                temperature=0.3,
             )
             title = response.choices[0].message.content.strip().replace('"', "")
             await chat_storage.save_title(self.session_id, title)
@@ -101,9 +103,18 @@ class AgentExecutor:
         self.state["chat_history"].append({"role": "user", "content": query})
         await self._save_state()
 
+        # Fetch relevant memories
+        memories = search_memories(query)
+        memory_str = (
+            "\n".join(f"- {m}" for m in memories)
+            if memories
+            else "No previous memories found."
+        )
+
         formatted_query = STARTING_PROMPT_TEMPLATE.format(
             query=query,
             current_date=datetime.now().strftime("%A, %B %d, %Y"),
+            memory=memory_str,
         )
         completion_args = get_completion_args(model=model_name)
         completion_args["tools"] = get_tools_schema()
@@ -220,6 +231,9 @@ class AgentExecutor:
             yield ErrorEvent(error=str(e))
         finally:
             await self._save_state()
+            # Store new memories from the interaction
+            if final_content:
+                add_memory(f"User: {query}\nAssistant: {final_content}")
 
         yield FinalResponseEvent(content=final_content)
 

@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     api_base: str = "http://localhost:13305/v1"
     api_key: str = "dummy-key"
-    title_model: str = "local-model"
+    title_model: str = "openai/chat-local"
     max_tokens: int = 8192
     temperature: float = 0.6
     frequency_penalty: float = 0.5
@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     step_threshold: int = 15
     redis_host: str = "127.0.0.1"
     redis_port: int = 6379
+    mem0_dir: str = ".mem0"
+    embedding_model: str = "openai/embed-local"
 
 
 settings = Settings()
