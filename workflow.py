@@ -72,11 +72,11 @@ class AgentExecutor:
             logger.info(f"Generating new title for session {self.session_id}...")
             title_prompt = TITLE_SUMMARIZER_PROMPT_TEMPLATE.format(query=query)
             args = get_completion_args(model=settings.title_model)
+            args["max_tokens"] = 50
+            args["temperature"] = 0.1
             response = await litellm.acompletion(
                 **args,
                 messages=[{"role": "user", "content": title_prompt}],
-                max_tokens=20,
-                temperature=0.3,
             )
             title = response.choices[0].message.content.strip().replace('"', "")
             await chat_storage.save_title(self.session_id, title)
@@ -144,36 +144,40 @@ class AgentExecutor:
                 current_content, current_thought = "", ""
                 tool_calls: List[ToolCall] = []
 
-                async for chunk in response:
-                    delta = chunk.choices[0].delta
+                try:
+                    async for chunk in response:
+                        delta = chunk.choices[0].delta
 
-                    # Handle Thinking
-                    thought = getattr(delta, "reasoning_content", None) or getattr(
-                        delta, "reasoning", None
-                    )
-                    if thought:
-                        current_thought += thought
-                        yield ThoughtEvent(thought=thought)
+                        # Handle Thinking
+                        thought = getattr(delta, "reasoning_content", None) or getattr(
+                            delta, "reasoning", None
+                        )
+                        if thought:
+                            current_thought += thought
+                            yield ThoughtEvent(thought=thought)
 
-                    # Handle Content
-                    if delta.content:
-                        current_content += delta.content
-                        yield ContentEvent(content=delta.content)
+                        # Handle Content
+                        if delta.content:
+                            current_content += delta.content
+                            yield ContentEvent(content=delta.content)
 
-                    # Handle Tool Calls
-                    if delta.tool_calls:
-                        for tc in delta.tool_calls:
-                            index = tc.index
-                            while len(tool_calls) <= index:
-                                tool_calls.append(ToolCall(function=ToolCallFunction()))
+                        # Handle Tool Calls
+                        if delta.tool_calls:
+                            for tc in delta.tool_calls:
+                                index = tc.index
+                                while len(tool_calls) <= index:
+                                    tool_calls.append(ToolCall(function=ToolCallFunction()))
 
-                            target = tool_calls[index]
-                            if tc.id:
-                                target.id = tc.id
-                            if tc.function.name:
-                                target.function.name += tc.function.name
-                            if tc.function.arguments:
-                                target.function.arguments += tc.function.arguments
+                                target = tool_calls[index]
+                                if tc.id:
+                                    target.id = tc.id
+                                if tc.function.name:
+                                    target.function.name += tc.function.name
+                                if tc.function.arguments:
+                                    target.function.arguments += tc.function.arguments
+                except Exception as e:
+                    logger.warning(f"Stream reading interrupted: {e}")
+
 
                 assistant_msg = {"role": "assistant", "content": current_content}
                 if current_thought:
