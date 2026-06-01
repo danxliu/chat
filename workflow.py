@@ -49,6 +49,10 @@ class ErrorEvent(BaseModel):
     error: str
 
 
+class WarningEvent(BaseModel):
+    warning: str
+
+
 class FinalResponseEvent(BaseModel):
     content: str
 

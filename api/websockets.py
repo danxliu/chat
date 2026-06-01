@@ -15,6 +15,7 @@ from workflow import (
     FinalResponseEvent,
     ThoughtEvent,
     ToolCallEvent,
+    WarningEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class MessageType(str, Enum):
     PONG = "pong"
     CANCEL = "cancel"
     ERROR = "error"
+    WARNING = "warning"
 
 
 class IncomingPayload(BaseModel):
@@ -72,6 +74,15 @@ class ConnectionManager:
         await self.send(
             {
                 "type": MessageType.ERROR.value,
+                "session_id": session_id,
+                "message": message,
+            }
+        )
+
+    async def send_warning(self, message: str, session_id: str | None = None):
+        await self.send(
+            {
+                "type": MessageType.WARNING.value,
                 "session_id": session_id,
                 "message": message,
             }
@@ -165,6 +176,8 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
                     final_response = c
                 case ErrorEvent(error=e):
                     await conn.send_error(e, payload.session_id)
+                case WarningEvent(warning=w):
+                    await conn.send_warning(w, payload.session_id)
                 case str(content):
                     final_response = content
 

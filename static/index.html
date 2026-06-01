@@ -28,6 +28,10 @@
     </head>
     <body>
         <div id="sidebar">
+            <div id="connection-pill" class="disconnected">
+                <div class="dot"></div>
+                <span>DISCONNECTED</span>
+            </div>
             <button id="new-chat">
                 <span class="material-icons">add</span>
                 New Chat
@@ -70,6 +74,8 @@
                 </div>
             </div>
         </div>
+
+        <div id="toast-container"></div>
 
         <script src="/static/app.js"></script>
     </body>

@@ -1,6 +1,7 @@
 let socket = null;
 let currentSessionId = null;
 let pingInterval = null;
+let pingTimeout = null;
 let isGenerating = false;
 
 const chatContainer = document.getElementById("chat-container");
@@ -15,6 +16,8 @@ const modelSelector = document.getElementById("model-selector");
 const attachButton = document.getElementById("attach-button");
 const fileInput = document.getElementById("file-input");
 const attachmentPreviews = document.getElementById("attachment-previews");
+const connectionPill = document.getElementById("connection-pill");
+const toastContainer = document.getElementById("toast-container");
 
 let pendingAttachments = [];
 
@@ -27,6 +30,7 @@ const MessageType = {
   PONG: "pong",
   CANCEL: "cancel",
   ERROR: "error",
+  WARNING: "warning",
 };
 
 const messageHandlers = {
@@ -36,6 +40,7 @@ const messageHandlers = {
   [MessageType.TITLE_UPDATE]: handleTitleUpdate,
   [MessageType.PONG]: handlePong,
   [MessageType.ERROR]: handleErrorMessage,
+  [MessageType.WARNING]: handleWarningMessage,
 };
 
 let currentAssistantMessageDiv = null;
@@ -219,6 +224,58 @@ function updateActiveSessionInList() {
   });
 }
 
+function setConnectionStatus(status) {
+  if (status === "CONNECTED") {
+    connectionPill.classList.remove("disconnected");
+    connectionPill.classList.add("connected");
+    connectionPill.querySelector("span").textContent = "CONNECTED";
+  } else {
+    connectionPill.classList.remove("connected");
+    connectionPill.classList.add("disconnected");
+    connectionPill.querySelector("span").textContent = "DISCONNECTED";
+  }
+}
+
+function showToast(level, message) {
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${level.toLowerCase()}`;
+
+  const icon = level === "ERROR" ? "error" : "warning";
+  const title = level.toUpperCase();
+
+  toast.innerHTML = `
+    <div class="toast-content">
+      <div class="toast-icon-container">
+        <span class="material-icons toast-icon">${icon}</span>
+      </div>
+      <div class="toast-text">
+        <div class="toast-title">${title}</div>
+        <div class="toast-desc">${message}</div>
+      </div>
+      <button class="toast-close">
+        <span class="material-icons">close</span>
+      </button>
+    </div>
+    <div class="toast-progress-bar"></div>
+  `;
+
+  const closeBtn = toast.querySelector(".toast-close");
+  closeBtn.onclick = () => {
+    toast.style.animation = "toast-slide-in 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55) reverse forwards";
+    setTimeout(() => toast.remove(), 300);
+  };
+
+  toastContainer.appendChild(toast);
+
+  // Auto remove after 5s
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.style.animation = "toast-slide-in 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55) reverse forwards";
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 5000);
+}
+
 function connectWebSocket() {
   if (socket && socket.readyState === WebSocket.OPEN) return;
 
@@ -228,10 +285,15 @@ function connectWebSocket() {
 
   socket.onopen = () => {
     console.log("Persistent WebSocket connected");
+    setConnectionStatus("CONNECTED");
     if (pingInterval) clearInterval(pingInterval);
     pingInterval = setInterval(() => {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: MessageType.PING }));
+        // If no pong in 5s, consider disconnected
+        pingTimeout = setTimeout(() => {
+          setConnectionStatus("DISCONNECTED");
+        }, 5000);
       }
     }, 30000);
   };
@@ -252,11 +314,14 @@ function connectWebSocket() {
 
   socket.onerror = (error) => {
     console.error("WebSocket Error:", error);
+    setConnectionStatus("DISCONNECTED");
   };
 
   socket.onclose = () => {
     console.log("WebSocket connection closed. Reconnecting in 3s...");
+    setConnectionStatus("DISCONNECTED");
     clearInterval(pingInterval);
+    if (pingTimeout) clearTimeout(pingTimeout);
     setTimeout(connectWebSocket, 3000);
   };
 }
@@ -383,15 +448,24 @@ function updateThinkingLog(data) {
   }
 }
 
-function handlePong(payload) {}
+function handlePong(payload) {
+  if (pingTimeout) clearTimeout(pingTimeout);
+  setConnectionStatus("CONNECTED");
+}
 
 function handleErrorMessage(payload) {
   console.error("Server Error:", payload.message);
+  showToast("ERROR", payload.message);
   if (!payload.session_id || payload.session_id === currentSessionId) {
     setGenerating(false);
     finalizeThinkingIndicator();
     appendMessage("system", "Error: " + payload.message);
   }
+}
+
+function handleWarningMessage(payload) {
+  console.warn("Server Warning:", payload.message);
+  showToast("WARNING", payload.message);
 }
 
 function showThinkingIndicator(text) {
