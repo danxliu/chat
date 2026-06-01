@@ -18,8 +18,11 @@ const fileInput = document.getElementById("file-input");
 const attachmentPreviews = document.getElementById("attachment-previews");
 const connectionPill = document.getElementById("connection-pill");
 const toastContainer = document.getElementById("toast-container");
+const inputArea = document.getElementById("input-area");
+const dragOverlay = document.getElementById("drag-overlay");
 
 let pendingAttachments = [];
+let dragCounter = 0;
 
 const MessageType = {
   MESSAGE: "message",
@@ -71,6 +74,39 @@ async function init() {
 
   attachButton.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", handleFileSelect);
+
+  inputArea.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    dragCounter++;
+    if (dragCounter === 1) {
+      dragOverlay.classList.add("drag-active");
+    }
+  });
+
+  inputArea.addEventListener("dragover", (e) => {
+    e.preventDefault();
+  });
+
+  inputArea.addEventListener("dragleave", (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter === 0) {
+      dragOverlay.classList.remove("drag-active");
+    }
+  });
+
+  inputArea.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    dragOverlay.classList.remove("drag-active");
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      for (const file of files) {
+        await uploadFile(file);
+      }
+    }
+  });
 
   // Create an initial session if none exist
   const response = await fetch("/api/chats");
