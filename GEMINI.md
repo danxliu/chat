@@ -40,7 +40,8 @@ devenv shell
 ### Configuration
 Create a `.env` file in the root directory to override default settings:
 ```env
-API_BASE=http://localhost:13305/v1
+LLM_API_BASE=http://localhost:13305/v1
+EMBED_API_BASE=http://localhost:8081/v1
 API_KEY=your-api-key
 MODEL=your-model-name
 MAX_TOKENS=8192

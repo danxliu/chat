@@ -76,15 +76,7 @@ class AgentExecutor:
     async def _generate_title(self, query: str) -> Optional[str]:
         try:
             logger.info(f"Generating new title for session {self.session_id}...")
-            title_prompt = TITLE_SUMMARIZER_PROMPT_TEMPLATE.format(query=query)
-            args = get_completion_args(model=settings.title_model)
-            args["max_tokens"] = 50
-            args["temperature"] = 0.1
-            response = await litellm.acompletion(
-                **args,
-                messages=[{"role": "user", "content": title_prompt}],
-            )
-            title = response.choices[0].message.content.strip().replace('"', "")
+            title = (query[:50] + "...") if len(query) > 50 else query
             await chat_storage.save_title(self.session_id, title)
             logger.info(f"Generated title for session {self.session_id}: {title}")
             return title

@@ -7,9 +7,10 @@ services:
     environment:
       - REDIS_HOST=chat-database
       - REDIS_PORT=6379
-      - API_BASE
+      - LLM_API_BASE
+      - EMBED_API_BASE
       - API_KEY
-      - TITLE_MODEL
+      - MODEL
       - MAX_TOKENS
       - TEMPERATURE
       - FREQUENCY_PENALTY

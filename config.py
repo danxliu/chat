@@ -6,9 +6,10 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    api_base: str = "http://localhost:13305/v1"
+    llm_api_base: str = "http://localhost:13305/v1"
+    embed_api_base: str = "http://localhost:8081/v1"
     api_key: str = "dummy-key"
-    title_model: str = "openai/chat-local"
+    model: str = "openai/chat-local"
     max_tokens: int = 8192
     temperature: float = 0.6
     frequency_penalty: float = 0.5

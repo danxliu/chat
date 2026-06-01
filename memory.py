@@ -15,9 +15,9 @@ config = {
     "llm": {
         "provider": "openai",
         "config": {
-            "model": _clean_model_name(settings.title_model),
+            "model": _clean_model_name(settings.model),
             "api_key": settings.api_key,
-            "openai_base_url": settings.api_base,
+            "openai_base_url": settings.llm_api_base,
         },
     },
     "embedder": {
@@ -25,7 +25,7 @@ config = {
         "config": {
             "model": _clean_model_name(settings.embedding_model),
             "api_key": settings.api_key,
-            "openai_base_url": settings.api_base,
+            "openai_base_url": settings.embed_api_base,
         },
     },
     "vector_store": {
