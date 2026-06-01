@@ -50,15 +50,12 @@ body {
     display: flex;
     flex-direction: column;
     padding: 15px;
+    gap: 10px;
 }
 
-.sidebar-separator {
-    border: none;
-    border-top: 1px solid var(--border-color);
-    margin: 15px 0;
-}
-
-#new-chat, #clear-all {
+#new-chat,
+#clear-all,
+#delete-memory {
     background-color: transparent;
     color: var(--text-primary);
     border: none;
@@ -76,12 +73,17 @@ body {
     background-color: var(--surface-hover);
 }
 
+#delete-memory {
+    background-color: rgba(255, 82, 82, 0.1);
+    color: var(--accent-red);
+}
+
 #clear-all {
     background-color: rgba(255, 82, 82, 0.1);
     color: var(--accent-red);
-    margin-top: auto;
 }
 
+#delete-memory:hover,
 #clear-all:hover {
     background-color: rgba(255, 82, 82, 0.2);
 }
@@ -288,7 +290,9 @@ body {
     outline: none;
 }
 
-.thinking-button:hover, .thinking-button.expanded, .thinking-button.finalized:hover {
+.thinking-button:hover,
+.thinking-button.expanded,
+.thinking-button.finalized:hover {
     background: var(--surface-hover);
     color: var(--text-primary);
     border-color: var(--border-color);
@@ -323,13 +327,20 @@ body {
 }
 
 @keyframes blink {
-    0% { opacity: 0.2; }
-    20% { opacity: 1; }
-    100% { opacity: 0.2; }
+    0% {
+        opacity: 0.2;
+    }
+    20% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0.2;
+    }
 }
 
 /* Markdown styling */
-.assistant-message pre, .thought-log pre {
+.assistant-message pre,
+.thought-log pre {
     background-color: var(--bg-color);
     padding: 10px;
     border-radius: 6px;
@@ -338,7 +349,8 @@ body {
     margin: 8px 0;
 }
 
-.assistant-message code, .thought-log code {
+.assistant-message code,
+.thought-log code {
     font-family: "Cascadia Code", "Consolas", monospace;
     font-size: 0.9em;
     background-color: var(--bg-color);
@@ -346,9 +358,16 @@ body {
     border-radius: 4px;
 }
 
-.assistant-message p, .thought-log p {
+.assistant-message p,
+.thought-log p {
     margin: 8px 0;
 }
 
-.assistant-message *:first-child, .thought-log *:first-child { margin-top: 0; }
-.assistant-message *:last-child, .thought-log *:last-child { margin-bottom: 0; }
+.assistant-message *:first-child,
+.thought-log *:first-child {
+    margin-top: 0;
+}
+.assistant-message *:last-child,
+.thought-log *:last-child {
+    margin-bottom: 0;
+}

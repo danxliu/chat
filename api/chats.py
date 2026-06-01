@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from models import AVAILABLE_MODELS
 from storage import chat_storage
 from workflow import AgentExecutor
+from memory import reset_memory
 
 router = APIRouter(prefix="/api/chats")
 
@@ -44,6 +45,12 @@ async def delete_chat(session_id: str):
 @router.delete("")
 async def clear_all_chats():
     await chat_storage.clear_all()
+    return {"status": "success"}
+
+
+@router.delete("/memory")
+async def clear_memory():
+    reset_memory()
     return {"status": "success"}
 
 

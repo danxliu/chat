@@ -58,3 +58,11 @@ def search_memories(query: str, user_id: str = "default_user", limit: int = 5):
     except Exception:
         logger.exception(f"Failed to search memories for user {user_id}")
         return []
+
+
+def reset_memory():
+    try:
+        memory.reset()
+        logger.info("Memory reset successful")
+    except Exception:
+        logger.exception("Failed to reset memory")

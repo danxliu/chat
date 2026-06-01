@@ -10,6 +10,7 @@ const sendButton = document.getElementById("send-button");
 const chatList = document.getElementById("chat-list");
 const newChatButton = document.getElementById("new-chat");
 const clearAllButton = document.getElementById("clear-all");
+const deleteMemoryButton = document.getElementById("delete-memory");
 const modelSelector = document.getElementById("model-selector");
 
 const MessageType = {
@@ -547,5 +548,23 @@ async function clearAllSessions() {
 }
 
 clearAllButton.addEventListener("click", clearAllSessions);
+
+async function deletePersonalHistory() {
+  if (
+    !confirm(
+      "Are you sure you want to delete your personal history? This will erase all learned memories and cannot be undone.",
+    )
+  )
+    return;
+
+  const response = await fetch("/api/chats/memory", { method: "DELETE" });
+  if (response.ok) {
+    alert("Personal history deleted successfully.");
+  } else {
+    alert("Failed to delete personal history.");
+  }
+}
+
+deleteMemoryButton.addEventListener("click", deletePersonalHistory);
 
 init();
