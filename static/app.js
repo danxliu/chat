@@ -162,7 +162,7 @@ async function loadHistory(sessionId) {
         finalizeThinkingIndicator();
         isThinkingOpen = false;
       }
-      appendMessage("user", msg.content);
+      appendMessage("user", msg.content, msg.attachments || []);
     } else if (msg.role === "assistant") {
       const hasToolCalls = msg.tool_calls && msg.tool_calls.length > 0;
 
@@ -186,7 +186,7 @@ async function loadHistory(sessionId) {
           finalizeThinkingIndicator();
           isThinkingOpen = false;
         }
-        appendMessage("assistant", msg.content);
+        appendMessage(msg.role, msg.content, msg.attachments || []);
       }
 
       // Finalize if it's the last message and still thinking
@@ -270,8 +270,9 @@ function handleIncomingMessage(payload) {
       currentAssistantContent = payload.content;
       const rawHtml = marked.parse(currentAssistantContent);
       const cleanHtml = DOMPurify.sanitize(rawHtml);
-      currentAssistantMessageDiv.innerHTML = cleanHtml;
-      renderMathInElement(currentAssistantMessageDiv, {
+      const textDiv = currentAssistantMessageDiv.querySelector(".message-text") || currentAssistantMessageDiv;
+      textDiv.innerHTML = cleanHtml;
+      renderMathInElement(textDiv, {
         delimiters: [
           { left: "$$", right: "$$", display: true },
           { left: "$", right: "$", display: false },
@@ -283,7 +284,7 @@ function handleIncomingMessage(payload) {
       currentAssistantMessageDiv = null;
       currentAssistantContent = "";
     } else {
-      appendMessage("assistant", payload.content);
+      appendMessage("assistant", payload.content, payload.attachments || []);
     }
     loadSessions(); // Reload sessions to update title if it was just generated
   }
@@ -299,19 +300,25 @@ function handleContentChunk(payload) {
       finalizeThinkingIndicator();
       currentAssistantMessageDiv = document.createElement("div");
       currentAssistantMessageDiv.className = "message assistant-message";
+
+      const textDiv = document.createElement("div");
+      textDiv.className = "message-text";
+      currentAssistantMessageDiv.appendChild(textDiv);
+
       messagesDiv.appendChild(currentAssistantMessageDiv);
       currentAssistantContent = "";
     }
 
     currentAssistantContent += payload.content;
+    const textDiv = currentAssistantMessageDiv.querySelector(".message-text");
 
     // Parse Markdown and sanitize
     const rawHtml = marked.parse(currentAssistantContent);
     const cleanHtml = DOMPurify.sanitize(rawHtml);
-    currentAssistantMessageDiv.innerHTML = cleanHtml;
+    textDiv.innerHTML = cleanHtml;
 
     // Render LaTeX
-    renderMathInElement(currentAssistantMessageDiv, {
+    renderMathInElement(textDiv, {
       delimiters: [
         { left: "$$", right: "$$", display: true },
         { left: "$", right: "$", display: false },
@@ -436,18 +443,50 @@ function removeThinkingIndicator() {
   if (indicator) indicator.remove();
 }
 
-function appendMessage(role, text) {
+function appendMessage(role, text, attachments = []) {
   const msgElement = document.createElement("div");
   msgElement.className = `message ${role}-message`;
+
+  if (attachments && attachments.length > 0) {
+    const attachmentsContainer = document.createElement("div");
+    attachmentsContainer.className = "message-attachments";
+    attachments.forEach((att) => {
+      const item = document.createElement("div");
+      item.className = "message-attachment-item";
+      if (att.mime_type && att.mime_type.startsWith("image/")) {
+        const img = document.createElement("img");
+        img.src = `/uploads/${att.stored_filename}`;
+        img.onclick = () => window.open(img.src, "_blank");
+        item.appendChild(img);
+      } else {
+        const icon = document.createElement("span");
+        icon.className = "material-icons";
+        icon.textContent = "description";
+        const name = document.createElement("span");
+        name.textContent = att.filename;
+        const link = document.createElement("a");
+        link.href = `/uploads/${att.stored_filename}`;
+        link.target = "_blank";
+        link.appendChild(icon);
+        link.appendChild(name);
+        item.appendChild(link);
+      }
+      attachmentsContainer.appendChild(item);
+    });
+    msgElement.appendChild(attachmentsContainer);
+  }
+
+  const textContainer = document.createElement("div");
+  textContainer.className = "message-text";
 
   if (role === "assistant") {
     // Parse Markdown and sanitize
     const rawHtml = marked.parse(text);
     const cleanHtml = DOMPurify.sanitize(rawHtml);
-    msgElement.innerHTML = cleanHtml;
+    textContainer.innerHTML = cleanHtml;
 
     // Render LaTeX
-    renderMathInElement(msgElement, {
+    renderMathInElement(textContainer, {
       delimiters: [
         { left: "$$", right: "$$", display: true },
         { left: "$", right: "$", display: false },
@@ -458,9 +497,10 @@ function appendMessage(role, text) {
     });
   } else {
     // For user messages, we can just use textContent or simple styling
-    msgElement.textContent = text;
+    textContainer.textContent = text;
   }
 
+  msgElement.appendChild(textContainer);
   messagesDiv.appendChild(msgElement);
   chatContainer.scrollTop = chatContainer.scrollHeight;
 }
@@ -478,7 +518,7 @@ function sendMessage() {
     currentSessionId
   ) {
     setGenerating(true);
-    appendMessage("user", text);
+    appendMessage("user", text, [...pendingAttachments]);
     socket.send(
       JSON.stringify({
         type: MessageType.MESSAGE,

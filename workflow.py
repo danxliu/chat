@@ -7,6 +7,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import litellm
 from pydantic import BaseModel
+from pypdf import PdfReader
 
 from agent import execute_tool, get_completion_args, get_tools_schema
 from config import settings
@@ -139,6 +140,7 @@ class AgentExecutor:
                             text += page.extract_text() + "\n"
                         extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
                     except Exception as e:
+                        logger.error(f"Error reading PDF {filename}: {e}")
                         extra_content += f"\n\nError reading PDF {filename}: {e}\n"
                 else:
                     try:
@@ -146,10 +148,13 @@ class AgentExecutor:
                             text = f.read()
                         extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
                     except Exception as e:
+                        logger.error(f"Error reading text file {filename}: {e}")
                         extra_content += f"\n\nError reading file {filename}: {e}\n"
 
         full_query = query + extra_content
-        self.state["chat_history"].append({"role": "user", "content": query})
+        self.state["chat_history"].append(
+            {"role": "user", "content": query, "attachments": attachments}
+        )
         await self._save_state()
 
         # Fetch relevant memories
@@ -310,6 +315,7 @@ class AgentExecutor:
                 "role": msg["role"],
                 "content": msg.get("content", ""),
                 "thought": msg.get("thought") or None,
+                "attachments": msg.get("attachments") or [],
             }
             history.append(item)
         return history
