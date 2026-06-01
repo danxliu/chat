@@ -280,10 +280,15 @@ class AgentExecutor:
                 else:
                     self.state["chat_history"].append(assistant_msg)
                     # If the agent sends a message without calling a tool, we give it a reminder
+                    if current_content:
+                        reminder = "You provided a response but did NOT call any tools. If this was your final answer, you MUST call the `finish_task` tool NOW to conclude. DO NOT provide any additional text or explanation; just call the `finish_task` tool."
+                    else:
+                        reminder = "You did not call any tools. If you have finished the task, call the `finish_task` tool NOW. If you need more information, use another tool. DO NOT provide any additional text; just call the tool."
+                    
                     self.state["chat_history"].append(
                         {
                             "role": "system",
-                            "content": "You have not called any tools. If you have finished the task, please call the finish_task tool. If you need to perform more actions, use the available tools.",
+                            "content": reminder,
                         }
                     )
                     await self._save_state()
@@ -312,6 +317,7 @@ class AgentExecutor:
                 "content": msg.get("content", ""),
                 "thought": msg.get("thought") or None,
                 "attachments": msg.get("attachments") or [],
+                "tool_calls": msg.get("tool_calls") or [],
             }
             history.append(item)
         return history

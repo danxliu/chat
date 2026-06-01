@@ -56,6 +56,11 @@ marked.setOptions({
   gfm: true,
 });
 
+function renderMarkdown(text) {
+  const rawHtml = marked.parse(text);
+  return DOMPurify.sanitize(rawHtml);
+}
+
 function setGenerating(state) {
   isGenerating = state;
   if (isGenerating) {
@@ -217,7 +222,8 @@ async function loadHistory(sessionId) {
         }
         if (hasToolCalls) {
           msg.tool_calls.forEach((tc) => {
-            updateThinkingLog({ type: "tool_call", tool: tc.name });
+            const toolName = tc.function ? tc.function.name : tc.name;
+            updateThinkingLog({ type: "tool_call", tool: toolName });
           });
         }
       }
@@ -379,8 +385,6 @@ function handleIncomingMessage(payload) {
       textDiv.innerHTML = cleanHtml;
       renderMathInElement(textDiv, {
         delimiters: [
-          { left: "$$", right: "$$", display: true },
-          { left: "$", right: "$", display: false },
           { left: "\\(", right: "\\)", display: false },
           { left: "\\[", right: "\\]", display: true },
         ],
@@ -425,8 +429,6 @@ function handleContentChunk(payload) {
     // Render LaTeX
     renderMathInElement(textDiv, {
       delimiters: [
-        { left: "$$", right: "$$", display: true },
-        { left: "$", right: "$", display: false },
         { left: "\\(", right: "\\)", display: false },
         { left: "\\[", right: "\\]", display: true },
       ],
@@ -457,6 +459,8 @@ function updateThinkingLog(data) {
   if (data.type === "thought") {
     currentThought += data.content;
   } else if (data.type === "tool_call") {
+    if (data.tool === "finish_task") return;
+
     currentThought += `\n\n**Tool Call:** ${data.tool}\n\n`;
 
     // Update thinking button text
@@ -467,20 +471,19 @@ function updateThinkingLog(data) {
   }
 
   // Parse Markdown and sanitize
-  const rawHtml = marked.parse(currentThought);
-  const cleanHtml = DOMPurify.sanitize(rawHtml);
+  const cleanHtml = renderMarkdown(currentThought);
   logDiv.innerHTML = cleanHtml;
 
   // Render LaTeX
-  renderMathInElement(logDiv, {
-    delimiters: [
-      { left: "$$", right: "$$", display: true },
-      { left: "$", right: "$", display: false },
-      { left: "\\(", right: "\\)", display: false },
-      { left: "\\[", right: "\\]", display: true },
-    ],
-    throwOnError: false,
-  });
+  if (typeof renderMathInElement === "function") {
+    renderMathInElement(logDiv, {
+      delimiters: [
+        { left: "\\(", right: "\\)", display: false },
+        { left: "\\[", right: "\\]", display: true },
+      ],
+      throwOnError: false,
+    });
+  }
 
   // Auto scroll the log if it's visible
   if (logDiv.style.display !== "none") {
@@ -595,20 +598,19 @@ function appendMessage(role, text, attachments = []) {
 
   if (role === "assistant") {
     // Parse Markdown and sanitize
-    const rawHtml = marked.parse(text);
-    const cleanHtml = DOMPurify.sanitize(rawHtml);
+    const cleanHtml = renderMarkdown(text);
     textContainer.innerHTML = cleanHtml;
 
     // Render LaTeX
-    renderMathInElement(textContainer, {
-      delimiters: [
-        { left: "$$", right: "$$", display: true },
-        { left: "$", right: "$", display: false },
-        { left: "\\(", right: "\\)", display: false },
-        { left: "\\[", right: "\\]", display: true },
-      ],
-      throwOnError: false,
-    });
+    if (typeof renderMathInElement === "function") {
+      renderMathInElement(textContainer, {
+        delimiters: [
+          { left: "\\(", right: "\\)", display: false },
+          { left: "\\[", right: "\\]", display: true },
+        ],
+        throwOnError: false,
+      });
+    }
   } else {
     // For user messages, we can just use textContent or simple styling
     textContainer.textContent = text;
