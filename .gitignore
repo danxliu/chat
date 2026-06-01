@@ -22,3 +22,4 @@ devenv.local.yaml
 .pre-commit-config.yaml
 
 .mem0
+uploads

@@ -1,7 +1,8 @@
+import base64
 import json
 import logging
-import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import litellm
@@ -98,8 +99,56 @@ class AgentExecutor:
         )
         return await self._generate_title(query)
 
-    async def run(self, query: str, model_name: str) -> AsyncGenerator[Any, None]:
+    async def run(
+        self, query: str, model_name: str, attachments: Optional[List[dict]] = None
+    ) -> AsyncGenerator[Any, None]:
         await self._load_state()
+
+        processed_attachments = []
+        extra_content = ""
+
+        if attachments:
+            for att in attachments:
+                filename = att.get("filename")
+                mime_type = att.get("mime_type", "")
+                stored_filename = att.get("stored_filename")
+
+                if not stored_filename:
+                    continue
+
+                file_path = Path("uploads") / stored_filename
+                if not file_path.exists():
+                    continue
+
+                if mime_type.startswith("image/"):
+                    with open(file_path, "rb") as f:
+                        base64_data = base64.b64encode(f.read()).decode("utf-8")
+                    processed_attachments.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{base64_data}"
+                            },
+                        }
+                    )
+                elif mime_type == "application/pdf":
+                    try:
+                        reader = PdfReader(file_path)
+                        text = ""
+                        for page in reader.pages:
+                            text += page.extract_text() + "\n"
+                        extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
+                    except Exception as e:
+                        extra_content += f"\n\nError reading PDF {filename}: {e}\n"
+                else:
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            text = f.read()
+                        extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
+                    except Exception as e:
+                        extra_content += f"\n\nError reading file {filename}: {e}\n"
+
+        full_query = query + extra_content
         self.state["chat_history"].append({"role": "user", "content": query})
         await self._save_state()
 
@@ -111,11 +160,19 @@ class AgentExecutor:
             else "No previous memories found."
         )
 
-        formatted_query = STARTING_PROMPT_TEMPLATE.format(
-            query=query,
+        formatted_query_text = STARTING_PROMPT_TEMPLATE.format(
+            query=full_query,
             current_date=datetime.now().strftime("%A, %B %d, %Y"),
             memory=memory_str,
         )
+
+        # Build multi-modal message if there are images
+        if processed_attachments:
+            user_content = [{"type": "text", "text": formatted_query_text}]
+            user_content.extend(processed_attachments)
+        else:
+            user_content = formatted_query_text
+
         completion_args = get_completion_args(model=model_name)
         completion_args["tools"] = get_tools_schema()
         completion_args["tool_choice"] = "auto"
@@ -131,7 +188,7 @@ class AgentExecutor:
                     if api_messages[i]["role"] == "user":
                         api_messages[i] = {
                             **api_messages[i],
-                            "content": formatted_query,
+                            "content": user_content,
                         }
                         break
 
@@ -166,7 +223,9 @@ class AgentExecutor:
                             for tc in delta.tool_calls:
                                 index = tc.index
                                 while len(tool_calls) <= index:
-                                    tool_calls.append(ToolCall(function=ToolCallFunction()))
+                                    tool_calls.append(
+                                        ToolCall(function=ToolCallFunction())
+                                    )
 
                                 target = tool_calls[index]
                                 if tc.id:
@@ -177,7 +236,6 @@ class AgentExecutor:
                                     target.function.arguments += tc.function.arguments
                 except Exception as e:
                     logger.warning(f"Stream reading interrupted: {e}")
-
 
                 assistant_msg = {"role": "assistant", "content": current_content}
                 if current_thought:

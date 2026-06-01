@@ -47,6 +47,7 @@
                 <div id="messages"></div>
             </div>
             <div id="input-area">
+                <div id="attachment-previews" class="attachment-previews"></div>
                 <textarea
                     id="user-input"
                     placeholder="Type your message here..."
@@ -54,10 +55,18 @@
                     rows="1"
                 ></textarea>
                 <div class="input-actions">
-                    <select id="model-selector"></select>
-                    <button id="send-button">
-                        <span class="material-icons">send</span>
-                    </button>
+                    <div class="input-actions-left">
+                        <button id="attach-button" title="Attach files">
+                            <span class="material-icons">add</span>
+                        </button>
+                        <input type="file" id="file-input" multiple style="display: none;">
+                    </div>
+                    <div class="input-actions-right">
+                        <select id="model-selector"></select>
+                        <button id="send-button">
+                            <span class="material-icons">send</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

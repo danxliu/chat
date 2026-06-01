@@ -1,13 +1,19 @@
+import os
+import shutil
 import uuid
+from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from memory import reset_memory
 from models import AVAILABLE_MODELS
 from storage import chat_storage
 from workflow import AgentExecutor
-from memory import reset_memory
 
 router = APIRouter(prefix="/api/chats")
+
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 
 @router.post("")
@@ -27,6 +33,27 @@ async def create_chat():
 async def list_chats():
     sessions = await chat_storage.list_sessions_with_titles()
     return {"sessions": sessions}
+
+
+@router.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    try:
+        file_id = str(uuid.uuid4())
+        file_extension = Path(file.filename).suffix if file.filename else ""
+        stored_filename = f"{file_id}{file_extension}"
+        file_path = UPLOAD_DIR / stored_filename
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        return {
+            "file_id": file_id,
+            "filename": file.filename,
+            "mime_type": file.content_type,
+            "stored_filename": stored_filename,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
 @router.get("/models")

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from enum import Enum
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError, model_validator
@@ -39,6 +39,7 @@ class IncomingPayload(BaseModel):
     session_id: Optional[str] = None
     content: Optional[str] = None
     model: Optional[str] = None
+    attachments: Optional[List[dict]] = None
 
     @model_validator(mode="after")
     def validate_payload(self) -> "IncomingPayload":
@@ -127,7 +128,9 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
         final_response = ""
 
         async for event in executor.run(
-            query=payload.content, model_name=payload.model
+            query=payload.content,
+            model_name=payload.model,
+            attachments=payload.attachments,
         ):
             if cancel_event.is_set():
                 logger.info(f"Session {payload.session_id} cancelled.")

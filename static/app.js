@@ -12,6 +12,11 @@ const newChatButton = document.getElementById("new-chat");
 const clearAllButton = document.getElementById("clear-all");
 const deleteMemoryButton = document.getElementById("delete-memory");
 const modelSelector = document.getElementById("model-selector");
+const attachButton = document.getElementById("attach-button");
+const fileInput = document.getElementById("file-input");
+const attachmentPreviews = document.getElementById("attachment-previews");
+
+let pendingAttachments = [];
 
 const MessageType = {
   MESSAGE: "message",
@@ -58,6 +63,9 @@ async function init() {
   connectWebSocket();
   await loadSessions();
   await loadModels();
+
+  attachButton.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", handleFileSelect);
 
   // Create an initial session if none exist
   const response = await fetch("/api/chats");
@@ -463,7 +471,7 @@ function sendMessage() {
   const text = userInput.value.trim();
   const model = modelSelector.value;
   if (
-    text &&
+    (text || pendingAttachments.length > 0) &&
     model &&
     socket &&
     socket.readyState === WebSocket.OPEN &&
@@ -477,11 +485,75 @@ function sendMessage() {
         session_id: currentSessionId,
         content: text,
         model: model,
+        attachments: pendingAttachments,
       }),
     );
     userInput.value = "";
     userInput.style.height = "auto";
+    clearAttachments();
   }
+}
+
+async function handleFileSelect(event) {
+  const files = Array.from(event.target.files);
+  for (const file of files) {
+    await uploadFile(file);
+  }
+  fileInput.value = ""; // Reset input
+}
+
+async function uploadFile(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const response = await fetch("/api/chats/upload", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json();
+    pendingAttachments.push(data);
+    renderAttachmentPreview(data, file);
+  } catch (error) {
+    console.error("Upload failed:", error);
+    appendMessage("system", `Upload failed for ${file.name}`);
+  }
+}
+
+function renderAttachmentPreview(data, file) {
+  const item = document.createElement("div");
+  item.className = "attachment-item";
+  item.dataset.fileId = data.file_id;
+
+  if (data.mime_type.startsWith("image/")) {
+    const img = document.createElement("img");
+    img.src = URL.createObjectURL(file);
+    item.appendChild(img);
+  } else {
+    const icon = document.createElement("span");
+    icon.className = "material-icons file-icon";
+    icon.textContent = "description";
+    item.appendChild(icon);
+  }
+
+  const removeBtn = document.createElement("button");
+  removeBtn.className = "remove-attachment";
+  removeBtn.innerHTML = '<span class="material-icons" style="font-size: 14px;">close</span>';
+  removeBtn.onclick = () => removeAttachment(data.file_id);
+  item.appendChild(removeBtn);
+
+  attachmentPreviews.appendChild(item);
+}
+
+function removeAttachment(fileId) {
+  pendingAttachments = pendingAttachments.filter((a) => a.file_id !== fileId);
+  const item = attachmentPreviews.querySelector(`[data-file-id="${fileId}"]`);
+  if (item) item.remove();
+}
+
+function clearAttachments() {
+  pendingAttachments = [];
+  attachmentPreviews.innerHTML = "";
 }
 
 function cancelMessage() {
