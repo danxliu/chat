@@ -261,7 +261,8 @@ function showToast(level, message) {
 
   const closeBtn = toast.querySelector(".toast-close");
   closeBtn.onclick = () => {
-    toast.style.animation = "toast-slide-in 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55) reverse forwards";
+    toast.style.animation =
+      "toast-slide-in 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55) reverse forwards";
     setTimeout(() => toast.remove(), 300);
   };
 
@@ -270,7 +271,8 @@ function showToast(level, message) {
   // Auto remove after 5s
   setTimeout(() => {
     if (toast.parentElement) {
-      toast.style.animation = "toast-slide-in 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55) reverse forwards";
+      toast.style.animation =
+        "toast-slide-in 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55) reverse forwards";
       setTimeout(() => toast.remove(), 300);
     }
   }, 5000);
@@ -335,7 +337,9 @@ function handleIncomingMessage(payload) {
       currentAssistantContent = payload.content;
       const rawHtml = marked.parse(currentAssistantContent);
       const cleanHtml = DOMPurify.sanitize(rawHtml);
-      const textDiv = currentAssistantMessageDiv.querySelector(".message-text") || currentAssistantMessageDiv;
+      const textDiv =
+        currentAssistantMessageDiv.querySelector(".message-text") ||
+        currentAssistantMessageDiv;
       textDiv.innerHTML = cleanHtml;
       renderMathInElement(textDiv, {
         delimiters: [
@@ -652,7 +656,8 @@ function renderAttachmentPreview(data, file) {
 
   const removeBtn = document.createElement("button");
   removeBtn.className = "remove-attachment";
-  removeBtn.innerHTML = '<span class="material-icons" style="font-size: 14px;">close</span>';
+  removeBtn.innerHTML =
+    '<span class="material-icons" style="font-size: 14px;">close</span>';
   removeBtn.onclick = () => removeAttachment(data.file_id);
   item.appendChild(removeBtn);
 
@@ -713,6 +718,27 @@ userInput.addEventListener("input", () => {
     userInput.style.overflowY = "auto";
   } else {
     userInput.style.overflowY = "hidden";
+  }
+});
+
+userInput.addEventListener("paste", async (e) => {
+  const items = e.clipboardData.items;
+  let files = [];
+
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].kind === "file") {
+      const file = items[i].getAsFile();
+      if (file) {
+        files.push(file);
+      }
+    }
+  }
+
+  if (files.length > 0) {
+    e.preventDefault();
+    for (const file of files) {
+      await uploadFile(file);
+    }
   }
 });
 
