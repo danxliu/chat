@@ -29,6 +29,17 @@ async def list_chats():
     return {"sessions": sessions}
 
 
+@router.get("/models")
+async def list_models():
+    return {"models": AVAILABLE_MODELS}
+
+
+@router.delete("/memory")
+async def clear_memory():
+    reset_memory()
+    return {"status": "success"}
+
+
 @router.get("/{session_id}/history")
 async def get_chat_history(session_id: str):
     executor = AgentExecutor(session_id)
@@ -46,14 +57,3 @@ async def delete_chat(session_id: str):
 async def clear_all_chats():
     await chat_storage.clear_all()
     return {"status": "success"}
-
-
-@router.delete("/memory")
-async def clear_memory():
-    reset_memory()
-    return {"status": "success"}
-
-
-@router.get("/models")
-async def list_models():
-    return {"models": AVAILABLE_MODELS}
