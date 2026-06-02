@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
@@ -55,6 +56,7 @@ class WarningEvent(BaseModel):
 
 class FinalResponseEvent(BaseModel):
     content: str
+    metrics: Optional[Dict[str, Any]] = None
 
 
 class AgentExecutor:
@@ -184,9 +186,12 @@ class AgentExecutor:
         completion_args["extra_body"] = {
             "chat_template_kwargs": {"enable_thinking": enable_reasoning}
         }
+        completion_args["stream_options"] = {"include_usage": True}
 
         final_content = ""
         should_stop = False
+        start_time = time.time()
+        total_completion_tokens = 0
 
         try:
             while not should_stop:
@@ -211,6 +216,16 @@ class AgentExecutor:
 
                 try:
                     async for chunk in response:
+                        if hasattr(chunk, "usage") and chunk.usage:
+                            usage = chunk.usage
+                            tokens = getattr(usage, "completion_tokens", 0)
+                            if tokens == 0 and isinstance(usage, dict):
+                                tokens = usage.get("completion_tokens", 0)
+                            total_completion_tokens += tokens
+
+                        if not chunk.choices:
+                            continue
+
                         delta = chunk.choices[0].delta
 
                         # Handle Thinking
@@ -283,10 +298,24 @@ class AgentExecutor:
                     await self._save_state()
                     continue
                 else:
+                    total_time = time.time() - start_time
+                    metrics = None
+                    if total_completion_tokens > 0:
+                        metrics = {
+                            "time_s": total_time,
+                            "tokens": total_completion_tokens,
+                            "tokens_per_sec": total_completion_tokens / total_time
+                            if total_time > 0
+                            else 0,
+                        }
+
+                    assistant_msg["metrics"] = metrics
                     self.state["chat_history"].append(assistant_msg)
                     should_stop = True
                     await self._save_state()
-                    continue
+
+                    yield FinalResponseEvent(content=final_content, metrics=metrics)
+                    return
 
         except Exception as e:
             logger.exception("Critical error during agent execution.")
@@ -296,8 +325,6 @@ class AgentExecutor:
             # Store new memories from the interaction
             if final_content:
                 add_memory(f"User: {query}\nAssistant: {final_content}")
-
-        yield FinalResponseEvent(content=final_content)
 
     async def get_history(self) -> List[Dict[str, Any]]:
         await self._load_state()
@@ -312,6 +339,7 @@ class AgentExecutor:
                 "thought": msg.get("thought") or None,
                 "attachments": msg.get("attachments") or [],
                 "tool_calls": msg.get("tool_calls") or [],
+                "metrics": msg.get("metrics") or None,
             }
             history.append(item)
         return history

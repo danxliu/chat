@@ -138,6 +138,7 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
     try:
         executor = AgentExecutor(payload.session_id)
         final_response = ""
+        metrics = None
 
         async for event in executor.run(
             query=payload.content,
@@ -174,8 +175,9 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
                             "content": c,
                         }
                     )
-                case FinalResponseEvent(content=c):
+                case FinalResponseEvent(content=c, metrics=m):
                     final_response = c
+                    metrics = m
                 case ErrorEvent(error=e):
                     await conn.send_error(e, payload.session_id)
                 case WarningEvent(warning=w):
@@ -188,6 +190,7 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
                 "type": MessageType.MESSAGE.value,
                 "session_id": payload.session_id,
                 "content": final_response,
+                "metrics": metrics,
             }
         )
 

@@ -755,3 +755,11 @@ body {
         transform: scaleX(1);
     }
 }
+
+.message-metrics {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    opacity: 0.8;
+    user-select: none;
+}

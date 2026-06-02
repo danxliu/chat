@@ -237,7 +237,12 @@ async function loadHistory(sessionId) {
           finalizeThinkingIndicator();
           isThinkingOpen = false;
         }
-        appendMessage(msg.role, msg.content, msg.attachments || []);
+        appendMessage(
+          msg.role,
+          msg.content,
+          msg.attachments || [],
+          msg.metrics,
+        );
       }
 
       // Finalize if it's the last message and still thinking
@@ -394,10 +399,23 @@ function handleIncomingMessage(payload) {
         ],
         throwOnError: false,
       });
+
+      if (payload.metrics) {
+        const metricsDiv = document.createElement("div");
+        metricsDiv.className = "message-metrics";
+        metricsDiv.textContent = `Generated ${payload.metrics.tokens} tokens in ${payload.metrics.time_s.toFixed(2)}s (${payload.metrics.tokens_per_sec.toFixed(1)} tokens/s)`;
+        currentAssistantMessageDiv.appendChild(metricsDiv);
+      }
+
       currentAssistantMessageDiv = null;
       currentAssistantContent = "";
     } else {
-      appendMessage("assistant", payload.content, payload.attachments || []);
+      appendMessage(
+        "assistant",
+        payload.content,
+        payload.attachments || [],
+        payload.metrics,
+      );
     }
     loadSessions(); // Reload sessions to update title if it was just generated
   }
@@ -567,7 +585,7 @@ function removeThinkingIndicator() {
   if (indicator) indicator.remove();
 }
 
-function appendMessage(role, text, attachments = []) {
+function appendMessage(role, text, attachments = [], metrics = null) {
   const msgElement = document.createElement("div");
   msgElement.className = `message ${role}-message`;
 
@@ -617,6 +635,13 @@ function appendMessage(role, text, attachments = []) {
         ],
         throwOnError: false,
       });
+    }
+
+    if (metrics) {
+      const metricsDiv = document.createElement("div");
+      metricsDiv.className = "message-metrics";
+      metricsDiv.textContent = `Generated ${metrics.tokens} tokens in ${metrics.time_s.toFixed(2)}s (${metrics.tokens_per_sec.toFixed(1)} tokens/s)`;
+      msgElement.appendChild(metricsDiv);
     }
   } else {
     // For user messages, we can just use textContent or simple styling
