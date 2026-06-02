@@ -1,45 +1,46 @@
-import { writable, get } from 'svelte/store';
+import { writable, get } from "svelte/store";
+import { toast } from "svelte-sonner";
 
 export const MessageType = {
-	MESSAGE: 'message',
-	THINKING: 'thinking',
-	CONTENT_CHUNK: 'content_chunk',
-	TITLE_UPDATE: 'title_update',
-	PING: 'ping',
-	PONG: 'pong',
-	CANCEL: 'cancel',
-	ERROR: 'error',
-	WARNING: 'warning'
+  MESSAGE: "message",
+  THINKING: "thinking",
+  CONTENT_CHUNK: "content_chunk",
+  TITLE_UPDATE: "title_update",
+  PING: "ping",
+  PONG: "pong",
+  CANCEL: "cancel",
+  ERROR: "error",
+  WARNING: "warning",
 } as const;
 
-export type MessageRole = 'user' | 'assistant' | 'system';
+export type MessageRole = "user" | "assistant" | "system";
 
 export interface Attachment {
-	file_id: string;
-	filename: string;
-	stored_filename: string;
-	mime_type: string;
+  file_id: string;
+  filename: string;
+  stored_filename: string;
+  mime_type: string;
 }
 
 export interface Metrics {
-	tokens: number;
-	time_s: number;
-	tokens_per_sec: number;
+  tokens: number;
+  time_s: number;
+  tokens_per_sec: number;
 }
 
 export interface Message {
-	role: MessageRole;
-	content: string;
-	attachments?: Attachment[];
-	metrics?: Metrics;
-	thought?: string;
-	id?: string;
-	isThinking?: boolean;
+  role: MessageRole;
+  content: string;
+  attachments?: Attachment[];
+  metrics?: Metrics;
+  thought?: string;
+  id?: string;
+  isThinking?: boolean;
 }
 
 export interface Session {
-	session_id: string;
-	title: string;
+  session_id: string;
+  title: string;
 }
 
 // Stores
@@ -49,7 +50,7 @@ export const currentSessionId = writable<string | null>(null);
 export const isGenerating = writable(false);
 export const isConnected = writable(false);
 export const models = writable<string[]>([]);
-export const selectedModel = writable<string>('');
+export const selectedModel = writable<string>("");
 export const enableReasoning = writable(true);
 
 let socket: WebSocket | null = null;
@@ -57,231 +58,265 @@ let pingInterval: ReturnType<typeof setInterval> | null = null;
 let pingTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export function connectWebSocket() {
-	if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))
-		return;
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING)
+  )
+    return;
 
-	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-	// In development, we might need to point to the FastAPI port explicitly if served separately
-	// but since we are aiming for a unified build, we'll assume relative pathing
-	const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
-	socket = new WebSocket(wsUrl);
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
+  socket = new WebSocket(wsUrl);
 
-	socket.onopen = () => {
-		console.log('WebSocket connected');
-		isConnected.set(true);
-		startPing();
-	};
+  socket.onopen = () => {
+    console.log("WebSocket connected");
+    isConnected.set(true);
+    startPing();
+  };
 
-	socket.onmessage = (event) => {
-		try {
-			const data = JSON.parse(event.data);
-			handleSocketMessage(data);
-		} catch (e) {
-			console.error('Error parsing WebSocket message:', e);
-		}
-	};
+  socket.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      handleSocketMessage(data);
+    } catch (e) {
+      console.error("Error parsing WebSocket message:", e);
+    }
+  };
 
-	socket.onerror = (error) => {
-		console.error('WebSocket error:', error);
-		isConnected.set(false);
-	};
+  socket.onerror = (error) => {
+    console.error("WebSocket error:", error);
+    isConnected.set(false);
+  };
 
-	socket.onclose = () => {
-		console.log('WebSocket closed. Reconnecting in 3s...');
-		isConnected.set(false);
-		stopPing();
-		setTimeout(connectWebSocket, 3000);
-	};
+  socket.onclose = () => {
+    console.log("WebSocket closed. Reconnecting in 3s...");
+    isConnected.set(false);
+    stopPing();
+    setTimeout(connectWebSocket, 3000);
+  };
 }
 
 function startPing() {
-	stopPing();
-	pingInterval = setInterval(() => {
-		if (socket?.readyState === WebSocket.OPEN) {
-			socket.send(JSON.stringify({ type: MessageType.PING }));
-			pingTimeout = setTimeout(() => {
-				isConnected.set(false);
-			}, 5000);
-		}
-	}, 30000);
+  stopPing();
+  pingInterval = setInterval(() => {
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: MessageType.PING }));
+      pingTimeout = setTimeout(() => {
+        isConnected.set(false);
+      }, 5000);
+    }
+  }, 30000);
 }
 
 function stopPing() {
-	if (pingInterval) clearInterval(pingInterval);
-	if (pingTimeout) clearTimeout(pingTimeout);
+  if (pingInterval) clearInterval(pingInterval);
+  if (pingTimeout) clearTimeout(pingTimeout);
 }
 
 function handleSocketMessage(payload: any) {
-	const currentSid = get(currentSessionId);
+  const currentSid = get(currentSessionId);
 
-	switch (payload.type) {
-		case MessageType.PONG:
-			if (pingTimeout) clearTimeout(pingTimeout);
-			isConnected.set(true);
-			break;
+  switch (payload.type) {
+    case MessageType.PONG:
+      if (pingTimeout) clearTimeout(pingTimeout);
+      isConnected.set(true);
+      break;
 
-		case MessageType.CONTENT_CHUNK:
-			if (payload.session_id === currentSid) {
-				messages.update((msgs) => {
-					const lastMsg = msgs[msgs.length - 1];
-					if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.isThinking) {
-						lastMsg.content += payload.content;
-						return [...msgs];
-					} else {
-						// Finalize thinking if open
-						const updated = msgs.map(m => m.isThinking ? { ...m, isThinking: false } : m);
-						return [...updated, { role: 'assistant', content: payload.content }];
-					}
-				});
-			}
-			break;
+    case MessageType.CONTENT_CHUNK:
+      if (payload.session_id === currentSid) {
+        messages.update((msgs) => {
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg && lastMsg.role === "assistant" && !lastMsg.isThinking) {
+            lastMsg.content += payload.content;
+            return [...msgs];
+          } else {
+            // Finalize thinking if open
+            const updated = msgs.map((m) =>
+              m.isThinking ? { ...m, isThinking: false } : m,
+            );
+            return [
+              ...updated,
+              { role: "assistant", content: payload.content },
+            ];
+          }
+        });
+      }
+      break;
 
-		case MessageType.THINKING:
-			if (payload.session_id === currentSid) {
-				messages.update((msgs) => {
-					let lastMsg = msgs[msgs.length - 1];
-					if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isThinking) {
-						if (payload.data) {
-							if (payload.data.type === 'thought') {
-								lastMsg.thought = (lastMsg.thought || '') + payload.data.content;
-							} else if (payload.data.type === 'tool_call') {
-								lastMsg.thought = (lastMsg.thought || '') + `\n\n**Tool Call:** ${payload.data.tool}\n\n`;
-							}
-						}
-						return [...msgs];
-					} else {
-						return [...msgs, { role: 'assistant', content: '', thought: payload.data?.content || '', isThinking: true }];
-					}
-				});
-			}
-			break;
+    case MessageType.THINKING:
+      if (payload.session_id === currentSid) {
+        messages.update((msgs) => {
+          let lastMsg = msgs[msgs.length - 1];
+          if (lastMsg && lastMsg.role === "assistant" && lastMsg.isThinking) {
+            if (payload.data) {
+              if (payload.data.type === "thought") {
+                lastMsg.thought =
+                  (lastMsg.thought || "") + payload.data.content;
+              } else if (payload.data.type === "tool_call") {
+                lastMsg.thought =
+                  (lastMsg.thought || "") +
+                  `\n\n**Tool Call:** ${payload.data.tool}\n\n`;
+              }
+            }
+            return [...msgs];
+          } else {
+            return [
+              ...msgs,
+              {
+                role: "assistant",
+                content: "",
+                thought: payload.data?.content || "",
+                isThinking: true,
+              },
+            ];
+          }
+        });
+      }
+      break;
 
-		case MessageType.MESSAGE:
-			if (payload.session_id === currentSid) {
-				isGenerating.set(false);
-				messages.update((msgs) => {
-					const lastMsg = msgs[msgs.length - 1];
-					if (lastMsg && lastMsg.role === 'assistant') {
-						lastMsg.content = payload.content;
-						lastMsg.metrics = payload.metrics;
-						lastMsg.isThinking = false;
-						return [...msgs];
-					}
-					return [...msgs, { role: 'assistant', content: payload.content, metrics: payload.metrics }];
-				});
-				refreshSessions();
-			}
-			break;
+    case MessageType.MESSAGE:
+      if (payload.session_id === currentSid) {
+        isGenerating.set(false);
+        messages.update((msgs) => {
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg && lastMsg.role === "assistant") {
+            lastMsg.content = payload.content;
+            lastMsg.metrics = payload.metrics;
+            lastMsg.isThinking = false;
+            return [...msgs];
+          }
+          return [
+            ...msgs,
+            {
+              role: "assistant",
+              content: payload.content,
+              metrics: payload.metrics,
+            },
+          ];
+        });
+        refreshSessions();
+      }
+      break;
 
-		case MessageType.TITLE_UPDATE:
-			refreshSessions();
-			break;
+    case MessageType.TITLE_UPDATE:
+      refreshSessions();
+      break;
 
-		case MessageType.ERROR:
-			console.error('Server error:', payload.message);
-			isGenerating.set(false);
-			messages.update((msgs) => [...msgs, { role: 'system', content: `Error: ${payload.message}` }]);
-			break;
+    case MessageType.ERROR:
+      console.error("Server error:", payload.message);
+      isGenerating.set(false);
+      toast.error(payload.message);
+      break;
 
-		case MessageType.WARNING:
-			console.warn('Server warning:', payload.message);
-			break;
-	}
+    case MessageType.WARNING:
+      console.warn("Server warning:", payload.message);
+      toast.warning(payload.message);
+      break;
+  }
 }
 
 export async function refreshSessions() {
-	const res = await fetch('/api/chats');
-	const data = await res.json();
-	sessions.set(data.sessions);
+  const res = await fetch("/api/chats");
+  const data = await res.json();
+  sessions.set(data.sessions);
 }
 
 export async function loadHistory(sessionId: string) {
-	const res = await fetch(`/api/chats/${sessionId}/history`);
-	const data = await res.json();
-	
-	const history: Message[] = [];
-	data.history.forEach((msg: any) => {
-		if (msg.role === 'user') {
-			history.push({ role: 'user', content: msg.content, attachments: msg.attachments });
-		} else {
-			history.push({ 
-				role: 'assistant', 
-				content: msg.content, 
-				thought: msg.thought, 
-				metrics: msg.metrics,
-				attachments: msg.attachments
-			});
-		}
-	});
-	messages.set(history);
+  const res = await fetch(`/api/chats/${sessionId}/history`);
+  const data = await res.json();
+
+  const history: Message[] = [];
+  data.history.forEach((msg: any) => {
+    if (msg.role === "user") {
+      history.push({
+        role: "user",
+        content: msg.content,
+        attachments: msg.attachments,
+      });
+    } else {
+      history.push({
+        role: "assistant",
+        content: msg.content,
+        thought: msg.thought,
+        metrics: msg.metrics,
+        attachments: msg.attachments,
+      });
+    }
+  });
+  messages.set(history);
 }
 
 export async function switchSession(sessionId: string) {
-	currentSessionId.set(sessionId);
-	await loadHistory(sessionId);
+  currentSessionId.set(sessionId);
+  await loadHistory(sessionId);
 }
 
 export async function createNewSession() {
-	const res = await fetch('/api/chats', { method: 'POST' });
-	const data = await res.json();
-	await refreshSessions();
-	await switchSession(data.session_id);
-	return data.session_id;
+  const res = await fetch("/api/chats", { method: "POST" });
+  const data = await res.json();
+  await refreshSessions();
+  await switchSession(data.session_id);
+  return data.session_id;
 }
 
 export async function deleteSession(sessionId: string) {
-	await fetch(`/api/chats/${sessionId}`, { method: 'DELETE' });
-	const current = get(currentSessionId);
-	if (current === sessionId) {
-		currentSessionId.set(null);
-		messages.set([]);
-	}
-	await refreshSessions();
-	
-	const s = get(sessions);
-	if (s.length > 0) {
-		await switchSession(s[0].session_id);
-	} else {
-		await createNewSession();
-	}
+  await fetch(`/api/chats/${sessionId}`, { method: "DELETE" });
+  const current = get(currentSessionId);
+  if (current === sessionId) {
+    currentSessionId.set(null);
+    messages.set([]);
+  }
+  await refreshSessions();
+
+  const s = get(sessions);
+  if (s.length > 0) {
+    await switchSession(s[0].session_id);
+  } else {
+    await createNewSession();
+  }
 }
 
 export async function loadModels() {
-	const res = await fetch('/api/chats/models');
-	const data = await res.json();
-	models.set(data.models);
-	if (data.models.length > 0 && !get(selectedModel)) {
-		selectedModel.set(data.models[0]);
-	}
+  const res = await fetch("/api/chats/models");
+  const data = await res.json();
+  models.set(data.models);
+  if (data.models.length > 0 && !get(selectedModel)) {
+    selectedModel.set(data.models[0]);
+  }
 }
 
 export function sendMessage(content: string, attachments: Attachment[] = []) {
-	const sid = get(currentSessionId);
-	const model = get(selectedModel);
-	const reasoning = get(enableReasoning);
+  const sid = get(currentSessionId);
+  const model = get(selectedModel);
+  const reasoning = get(enableReasoning);
 
-	if (!sid || !socket || socket.readyState !== WebSocket.OPEN) return;
+  if (!sid || !socket || socket.readyState !== WebSocket.OPEN) return;
 
-	isGenerating.set(true);
-	messages.update((msgs) => [...msgs, { role: 'user', content, attachments }]);
+  isGenerating.set(true);
+  messages.update((msgs) => [...msgs, { role: "user", content, attachments }]);
 
-	socket.send(JSON.stringify({
-		type: MessageType.MESSAGE,
-		session_id: sid,
-		content,
-		model,
-		attachments,
-		enable_reasoning: reasoning
-	}));
+  socket.send(
+    JSON.stringify({
+      type: MessageType.MESSAGE,
+      session_id: sid,
+      content,
+      model,
+      attachments,
+      enable_reasoning: reasoning,
+    }),
+  );
 }
 
 export function cancelGeneration() {
-	const sid = get(currentSessionId);
-	if (!sid || !socket || socket.readyState !== WebSocket.OPEN) return;
+  const sid = get(currentSessionId);
+  if (!sid || !socket || socket.readyState !== WebSocket.OPEN) return;
 
-	socket.send(JSON.stringify({
-		type: MessageType.CANCEL,
-		session_id: sid
-	}));
-	isGenerating.set(false);
+  socket.send(
+    JSON.stringify({
+      type: MessageType.CANCEL,
+      session_id: sid,
+    }),
+  );
+  isGenerating.set(false);
 }
