@@ -23,19 +23,70 @@
 		Square, 
 		Paperclip, 
 		BrainCircuit,
-		X
+		X,
+		Upload
 	} from 'lucide-svelte';
 	import type { Attachment as AttachmentType } from '$lib/stores/chat';
 	import Attachment from './Attachment.svelte';
 
 	let input = $state('');
 	let pendingAttachments = $state<AttachmentType[]>([]);
+	let isDragging = $state(false);
+	let dragCounter = 0;
 	let fileInput: HTMLInputElement;
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			handleSend();
+		}
+	}
+
+	function handlePaste(e: ClipboardEvent) {
+		const items = e.clipboardData?.items;
+		let hasFiles = false;
+		if (items) {
+			for (const item of Array.from(items)) {
+				if (item.kind === 'file') {
+					const file = item.getAsFile();
+					if (file) {
+						uploadFile(file);
+						hasFiles = true;
+					}
+				}
+			}
+		}
+		if (hasFiles) {
+			e.preventDefault();
+		}
+	}
+
+	function handleDragEnter(e: DragEvent) {
+		e.preventDefault();
+		dragCounter++;
+		isDragging = true;
+	}
+
+	function handleDragOver(e: DragEvent) {
+		e.preventDefault();
+	}
+
+	function handleDragLeave(e: DragEvent) {
+		e.preventDefault();
+		dragCounter--;
+		if (dragCounter === 0) {
+			isDragging = false;
+		}
+	}
+
+	async function handleDrop(e: DragEvent) {
+		e.preventDefault();
+		dragCounter = 0;
+		isDragging = false;
+		if (e.dataTransfer?.files) {
+			for (const file of Array.from(e.dataTransfer.files)) {
+				await uploadFile(file);
+			}
 		}
 	}
 
@@ -83,7 +134,22 @@
 </script>
 
 <div class="p-4 bg-background">
-	<div class="flex flex-col border rounded-xl bg-background focus-within:ring-1 focus-within:ring-ring transition-all duration-200">
+	<div 
+		class="relative flex flex-col border rounded-xl bg-background focus-within:ring-1 focus-within:ring-ring transition-all duration-200"
+		role="region"
+		aria-label="Chat input drop zone"
+		ondragenter={handleDragEnter}
+		ondragover={handleDragOver}
+		ondragleave={handleDragLeave}
+		ondrop={handleDrop}
+	>
+		{#if isDragging}
+			<div class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary rounded-xl pointer-events-none animate-in fade-in duration-200">
+				<Upload class="h-8 w-8 text-primary mb-2 animate-bounce" />
+				<p class="text-sm font-medium text-primary">Drop files here</p>
+			</div>
+		{/if}
+
 		{#if pendingAttachments.length > 0}
 			<div class="flex flex-wrap gap-2 px-4 pt-4 pb-0">
 				{#each pendingAttachments as att}
@@ -100,6 +166,7 @@
 			placeholder="Type your message..."
 			class="min-h-[80px] max-h-[200px] resize-none border-0 focus-visible:ring-0 shadow-none px-4 pt-4"
 			onkeydown={handleKeydown}
+			onpaste={handlePaste}
 		/>
 
 		<div class="flex items-center justify-between gap-4 p-2">
