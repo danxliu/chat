@@ -44,12 +44,36 @@
 	:global(.markdown-body p:last-child) {
 		margin-bottom: 0;
 	}
-	:global(.markdown-body ul, .markdown-body ol) {
+	:global(.markdown-body ul) {
+		list-style-type: disc;
+		margin-bottom: 1rem;
+		padding-left: 1.5rem;
+	}
+	:global(.markdown-body ol) {
+		list-style-type: decimal;
 		margin-bottom: 1rem;
 		padding-left: 1.5rem;
 	}
 	:global(.markdown-body li) {
 		margin-bottom: 0.25rem;
+	}
+	:global(.markdown-body table) {
+		width: 100%;
+		border-collapse: collapse;
+		margin-top: 1rem;
+		margin-bottom: 1rem;
+	}
+	:global(.markdown-body th), :global(.markdown-body td) {
+		border: 1px solid hsl(var(--border));
+		padding: 0.5rem;
+		text-align: left;
+	}
+	:global(.markdown-body th) {
+		background-color: hsl(var(--muted));
+		font-weight: 600;
+	}
+	:global(.markdown-body tr:nth-child(even)) {
+		background-color: hsl(var(--muted) / 0.5);
 	}
 	:global(.markdown-body blockquote) {
 		border-left-width: 4px;
