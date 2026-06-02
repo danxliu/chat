@@ -177,6 +177,9 @@ class AgentExecutor:
         completion_args = get_completion_args(model=model_name)
         completion_args["tools"] = get_tools_schema()
         completion_args["tool_choice"] = "auto"
+        completion_args["extra_body"] = {
+            "chat_template_kwargs": {"enable_thinking": True}
+        }
 
         final_content = ""
         should_stop = False
