@@ -545,6 +545,10 @@ function showThinkingIndicator(text) {
 function finalizeThinkingIndicator() {
   const indicator = document.getElementById("thinking-indicator");
   if (indicator) {
+    if (!currentThought.trim()) {
+      indicator.remove();
+      return;
+    }
     indicator.id = ""; // Remove ID to allow a new one for next message
     const button = indicator.querySelector(".thinking-button");
     if (button) {
@@ -635,6 +639,7 @@ function sendMessage() {
   ) {
     setGenerating(true);
     appendMessage("user", text, [...pendingAttachments]);
+    showThinkingIndicator("Assistant is thinking...");
     socket.send(
       JSON.stringify({
         type: MessageType.MESSAGE,
