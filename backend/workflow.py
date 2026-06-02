@@ -13,9 +13,9 @@ from pypdf import PdfReader
 from agent import execute_tool, get_completion_args, get_tools_schema
 from config import settings
 from memory import add_memory, search_memories
+from models import Attachment, ChatMessage, Metrics
 from prompts import (
     STARTING_PROMPT_TEMPLATE,
-    TITLE_SUMMARIZER_PROMPT_TEMPLATE,
 )
 from storage import chat_storage
 
@@ -326,20 +326,46 @@ class AgentExecutor:
             if final_content:
                 add_memory(f"User: {query}\nAssistant: {final_content}")
 
-    async def get_history(self) -> List[Dict[str, Any]]:
+    async def get_history(self) -> List[ChatMessage]:
         await self._load_state()
-        history = []
-        for msg in self.state.get("chat_history", []):
-            if msg["role"] not in ("user", "assistant"):
-                continue
+        history: List[ChatMessage] = []
 
-            item = {
-                "role": msg["role"],
-                "content": msg.get("content", ""),
-                "thought": msg.get("thought") or None,
-                "attachments": msg.get("attachments") or [],
-                "tool_calls": msg.get("tool_calls") or [],
-                "metrics": msg.get("metrics") or None,
-            }
-            history.append(item)
+        for msg in self.state.get("chat_history", []):
+            role = msg.get("role")
+            if role == "user":
+                history.append(
+                    ChatMessage(
+                        role="user",
+                        content=msg.get("content", ""),
+                        attachments=msg.get("attachments"),
+                    )
+                )
+            elif role == "assistant":
+                if history and history[-1].role == "assistant":
+                    target = history[-1]
+                else:
+                    target = ChatMessage(role="assistant", content="")
+                    history.append(target)
+
+                new_thought = msg.get("thought", "")
+                for tc in msg.get("tool_calls", []):
+                    name = tc.get("function", {}).get("name", "unknown")
+                    new_thought += f"\n\n**Tool Call:** {name}\n\n"
+
+                if new_thought:
+                    target.thought = (target.thought or "") + new_thought
+
+                new_content = msg.get("content", "")
+                if new_content:
+                    target.content = (
+                        f"{target.content}\n\n{new_content}"
+                        if target.content
+                        else new_content
+                    )
+
+                if msg.get("metrics"):
+                    target.metrics = Metrics(**msg["metrics"])
+                if msg.get("attachments"):
+                    target.attachments = [Attachment(**a) for a in msg["attachments"]]
+
         return history

@@ -6,10 +6,10 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from memory import reset_memory
-from models import AVAILABLE_MODELS
 from storage import chat_storage
 from workflow import AgentExecutor
 from config import settings
+from models import AVAILABLE_MODELS, HistoryResponse
 
 router = APIRouter(prefix="/api/chats")
 
@@ -68,7 +68,7 @@ async def clear_memory():
     return {"status": "success"}
 
 
-@router.get("/{session_id}/history")
+@router.get("/{session_id}/history", response_model=HistoryResponse)
 async def get_chat_history(session_id: str):
     executor = AgentExecutor(session_id)
     history = await executor.get_history()
