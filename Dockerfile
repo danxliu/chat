@@ -1,27 +1,28 @@
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
+FROM oven/bun:latest AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/bun.lock ./
+RUN bun install --frozen-lockfile
+COPY frontend/ ./
+RUN bun run build
+
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS backend-builder
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
-WORKDIR /app
-
+WORKDIR /app/backend
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential
-
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=backend/uv.lock,target=uv.lock \
+    --mount=type=bind,source=backend/pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --no-dev --verbose
 
 FROM python:3.13-slim-bookworm
 ENV PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
-
+    PATH="/app/backend/.venv/bin:$PATH"
 RUN useradd -m -d /app -s /bin/bash appuser
-
 WORKDIR /app
-
-COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
-COPY --chown=appuser:appuser . /app
-
+COPY --from=backend-builder --chown=appuser:appuser /app/backend/.venv /app/backend/.venv
+COPY --chown=appuser:appuser backend/ /app/backend/
+COPY --from=frontend-builder --chown=appuser:appuser /app/frontend/build /app/frontend/build
 USER appuser
-
 EXPOSE 8000
-
+WORKDIR /app/backend
 CMD ["python", "main.py"]
