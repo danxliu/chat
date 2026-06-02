@@ -5,7 +5,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - REDIS_HOST=chat-database
+      - REDIS_HOST=redis
       - REDIS_PORT=6379
       - LLM_API_BASE
       - EMBED_API_BASE
