@@ -459,7 +459,6 @@ function updateThinkingLog(data) {
   if (data.type === "thought") {
     currentThought += data.content;
   } else if (data.type === "tool_call") {
-    if (data.tool === "finish_task") return;
 
     currentThought += `\n\n**Tool Call:** ${data.tool}\n\n`;
 

@@ -255,8 +255,6 @@ class AgentExecutor:
 
                     for tc in tool_calls:
                         name = tc.function.name
-                        if name == "finish_task":
-                            should_stop = True
 
                         args_str = tc.function.arguments
                         try:
@@ -279,18 +277,7 @@ class AgentExecutor:
                     continue
                 else:
                     self.state["chat_history"].append(assistant_msg)
-                    # If the agent sends a message without calling a tool, we give it a reminder
-                    if current_content:
-                        reminder = "You provided a response but did NOT call any tools. If this was your final answer, you MUST call the `finish_task` tool NOW to conclude. DO NOT provide any additional text or explanation; just call the `finish_task` tool."
-                    else:
-                        reminder = "You did not call any tools. If you have finished the task, call the `finish_task` tool NOW. If you need more information, use another tool. DO NOT provide any additional text; just call the tool."
-                    
-                    self.state["chat_history"].append(
-                        {
-                            "role": "system",
-                            "content": reminder,
-                        }
-                    )
+                    should_stop = True
                     await self._save_state()
                     continue
 
