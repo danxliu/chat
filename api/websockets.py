@@ -42,6 +42,7 @@ class IncomingPayload(BaseModel):
     content: Optional[str] = None
     model: Optional[str] = None
     attachments: Optional[List[dict]] = None
+    enable_reasoning: bool = True
 
     @model_validator(mode="after")
     def validate_payload(self) -> "IncomingPayload":
@@ -142,6 +143,7 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
             query=payload.content,
             model_name=payload.model,
             attachments=payload.attachments,
+            enable_reasoning=payload.enable_reasoning,
         ):
             if cancel_event.is_set():
                 logger.info(f"Session {payload.session_id} cancelled.")

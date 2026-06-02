@@ -97,7 +97,11 @@ class AgentExecutor:
         return await self._generate_title(query)
 
     async def run(
-        self, query: str, model_name: str, attachments: Optional[List[dict]] = None
+        self,
+        query: str,
+        model_name: str,
+        attachments: Optional[List[dict]] = None,
+        enable_reasoning: bool = True,
     ) -> AsyncGenerator[Any, None]:
         await self._load_state()
 
@@ -178,7 +182,7 @@ class AgentExecutor:
         completion_args["tools"] = get_tools_schema()
         completion_args["tool_choice"] = "auto"
         completion_args["extra_body"] = {
-            "chat_template_kwargs": {"enable_thinking": True}
+            "chat_template_kwargs": {"enable_thinking": enable_reasoning}
         }
 
         final_content = ""

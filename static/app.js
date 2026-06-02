@@ -14,6 +14,7 @@ const clearAllButton = document.getElementById("clear-all");
 const deleteMemoryButton = document.getElementById("delete-memory");
 const modelSelector = document.getElementById("model-selector");
 const attachButton = document.getElementById("attach-button");
+const reasoningButton = document.getElementById("reasoning-button");
 const fileInput = document.getElementById("file-input");
 const attachmentPreviews = document.getElementById("attachment-previews");
 const connectionPill = document.getElementById("connection-pill");
@@ -78,6 +79,9 @@ async function init() {
   await loadModels();
 
   attachButton.addEventListener("click", () => fileInput.click());
+  reasoningButton.addEventListener("click", () => {
+    reasoningButton.classList.toggle("active");
+  });
   fileInput.addEventListener("change", handleFileSelect);
 
   inputArea.addEventListener("dragenter", (e) => {
@@ -638,7 +642,9 @@ function sendMessage() {
   ) {
     setGenerating(true);
     appendMessage("user", text, [...pendingAttachments]);
-    showThinkingIndicator("Assistant is thinking...");
+    if (reasoningButton.classList.contains("active")) {
+      showThinkingIndicator("Assistant is thinking...");
+    }
     socket.send(
       JSON.stringify({
         type: MessageType.MESSAGE,
@@ -646,6 +652,7 @@ function sendMessage() {
         content: text,
         model: model,
         attachments: pendingAttachments,
+        enable_reasoning: reasoningButton.classList.contains("active"),
       }),
     );
     userInput.value = "";

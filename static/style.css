@@ -288,7 +288,8 @@ body {
     background-color: rgba(255, 82, 82, 0.25);
 }
 
-#attach-button {
+#attach-button,
+#reasoning-button {
     background: transparent;
     color: var(--text-secondary);
     border: 1px solid var(--border-color);
@@ -303,13 +304,21 @@ body {
     flex-shrink: 0;
 }
 
-#attach-button:hover {
+#attach-button:hover,
+#reasoning-button:hover {
     background-color: var(--surface-hover);
     color: var(--text-primary);
     border-color: var(--text-secondary);
 }
 
-#attach-button .material-icons {
+#reasoning-button.active {
+    background-color: var(--surface-active);
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+}
+
+#attach-button .material-icons,
+#reasoning-button .material-icons {
     font-size: 20px;
 }
 
