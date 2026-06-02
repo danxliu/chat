@@ -5,11 +5,17 @@
   dotenv.enable = true;
   languages.python = {
     enable = true;
+    directory = "./backend";
     uv = {
       enable = true;
       sync.enable = true;
     };
     venv.enable = true;
+  };
+
+  languages.javascript = {
+    enable = true;
+    bun.enable = true;
   };
 
   # https://devenv.sh/packages/

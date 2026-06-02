@@ -9,10 +9,11 @@ from memory import reset_memory
 from models import AVAILABLE_MODELS
 from storage import chat_storage
 from workflow import AgentExecutor
+from config import settings
 
 router = APIRouter(prefix="/api/chats")
 
-UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR = settings.UPLOADS_DIR
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 

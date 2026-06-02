@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -5,6 +7,11 @@ class Settings(BaseSettings):
     """Pydantic model to manage configuration from .env"""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    # Paths
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent
+    UPLOADS_DIR: Path = BASE_DIR / "uploads"
+    FRONTEND_BUILD_DIR: Path = BASE_DIR / "frontend" / "build"
 
     llm_api_base: str = "http://localhost:13305/v1"
     embed_api_base: str = "http://localhost:8081/v1"
