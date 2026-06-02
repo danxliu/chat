@@ -10,6 +10,7 @@
     import { Button } from "$lib/components/ui/button";
     import { Separator } from "$lib/components/ui/separator";
     import { ScrollArea } from "$lib/components/ui/scroll-area";
+    import SettingsDialog from "./SettingsDialog.svelte";
     import {
         Plus,
         MessageSquare,
@@ -56,7 +57,7 @@
     </div>
 
     <ScrollArea class="flex-1 m-4">
-        <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-2">
             <Button
                 onclick={createNewSession}
                 class="w-full justify-start gap-2"
@@ -110,5 +111,6 @@
             <Database class="h-4 w-4" />
             Clear Memory
         </Button>
+        <SettingsDialog />
     </div>
 </div>

@@ -1,5 +1,6 @@
 import { writable, get } from "svelte/store";
 import { toast } from "svelte-sonner";
+import { settings } from "./settings";
 
 export const MessageType = {
   MESSAGE: "message",
@@ -290,6 +291,7 @@ export function sendMessage(content: string, attachments: Attachment[] = []) {
   const sid = get(currentSessionId);
   const model = get(selectedModel);
   const reasoning = get(enableReasoning);
+  const currentSettings = get(settings);
 
   if (!sid || !socket || socket.readyState !== WebSocket.OPEN) return;
 
@@ -301,9 +303,12 @@ export function sendMessage(content: string, attachments: Attachment[] = []) {
       type: MessageType.MESSAGE,
       session_id: sid,
       content,
-      model,
+      model: currentSettings.llmModel || model,
       attachments,
       enable_reasoning: reasoning,
+      llm_api_base: currentSettings.llmBaseUrl || undefined,
+      embedding_model: currentSettings.embedModel || undefined,
+      embed_api_base: currentSettings.embedBaseUrl || undefined,
     }),
   );
 }

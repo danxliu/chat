@@ -104,6 +104,9 @@ class AgentExecutor:
         model_name: str,
         attachments: Optional[List[dict]] = None,
         enable_reasoning: bool = True,
+        llm_api_base: Optional[str] = None,
+        embedding_model: Optional[str] = None,
+        embed_api_base: Optional[str] = None,
     ) -> AsyncGenerator[Any, None]:
         await self._load_state()
 
@@ -160,7 +163,9 @@ class AgentExecutor:
         await self._save_state()
 
         # Fetch relevant memories
-        memories = search_memories(query)
+        memories = search_memories(
+            query, embedding_model=embedding_model, embed_api_base=embed_api_base
+        )
         memory_str = (
             "\n".join(f"- {m}" for m in memories)
             if memories
@@ -180,7 +185,7 @@ class AgentExecutor:
         else:
             user_content = formatted_query_text
 
-        completion_args = get_completion_args(model=model_name)
+        completion_args = get_completion_args(model=model_name, api_base=llm_api_base)
         completion_args["tools"] = get_tools_schema()
         completion_args["tool_choice"] = "auto"
         completion_args["extra_body"] = {
@@ -324,7 +329,11 @@ class AgentExecutor:
             await self._save_state()
             # Store new memories from the interaction
             if final_content:
-                add_memory(f"User: {query}\nAssistant: {final_content}")
+                add_memory(
+                    f"User: {query}\nAssistant: {final_content}",
+                    embedding_model=embedding_model,
+                    embed_api_base=embed_api_base,
+                )
 
     async def get_history(self) -> List[ChatMessage]:
         await self._load_state()

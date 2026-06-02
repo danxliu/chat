@@ -43,6 +43,9 @@ class IncomingPayload(BaseModel):
     model: Optional[str] = None
     attachments: Optional[List[dict]] = None
     enable_reasoning: bool = True
+    llm_api_base: Optional[str] = None
+    embedding_model: Optional[str] = None
+    embed_api_base: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_payload(self) -> "IncomingPayload":
@@ -53,10 +56,6 @@ class IncomingPayload(BaseModel):
                 raise ValueError("Missing content")
             if not self.model:
                 raise ValueError("Missing model selection")
-            if not AVAILABLE_MODELS:
-                raise ValueError("No models available on the server")
-            if self.model not in AVAILABLE_MODELS:
-                raise ValueError(f"Invalid model: {self.model}")
         return self
 
 
@@ -145,6 +144,9 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
             model_name=payload.model,
             attachments=payload.attachments,
             enable_reasoning=payload.enable_reasoning,
+            llm_api_base=payload.llm_api_base,
+            embedding_model=payload.embedding_model,
+            embed_api_base=payload.embed_api_base,
         ):
             if cancel_event.is_set():
                 logger.info(f"Session {payload.session_id} cancelled.")

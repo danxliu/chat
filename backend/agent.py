@@ -81,11 +81,11 @@ def execute_tool(name: str, kwargs: Dict[str, Any]) -> str:
         return f"Error executing tool '{name}': {e}"
 
 
-def get_completion_args(model: str) -> Dict[str, Any]:
+def get_completion_args(model: str, api_base: str | None = None) -> Dict[str, Any]:
     """Returns the default arguments for LiteLLM completion."""
     return {
         "model": model,
-        "api_base": settings.llm_api_base,
+        "api_base": api_base or settings.llm_api_base,
         "api_key": settings.api_key,
         "temperature": settings.temperature,
         "max_tokens": settings.max_tokens,
