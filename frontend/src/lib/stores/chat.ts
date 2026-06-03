@@ -6,6 +6,7 @@ export const MessageType = {
   MESSAGE: "message",
   THINKING: "thinking",
   CONTENT_CHUNK: "content_chunk",
+  RICH_BLOCK: "rich_block",
   TITLE_UPDATE: "title_update",
   PING: "ping",
   PONG: "pong",
@@ -29,9 +30,15 @@ export interface Metrics {
   tokens_per_sec: number;
 }
 
+export interface Block {
+  index: number;
+  type: string;
+  content: any;
+}
+
 export interface Message {
   role: MessageRole;
-  content: string;
+  blocks: Block[];
   attachments?: Attachment[];
   metrics?: Metrics;
   thought?: string;
@@ -132,19 +139,60 @@ function handleSocketMessage(payload: any) {
       if (payload.session_id === currentSid) {
         messages.update((msgs) => {
           const lastMsg = msgs[msgs.length - 1];
-          if (lastMsg && lastMsg.role === "assistant" && !lastMsg.isThinking) {
-            lastMsg.content += payload.content;
-            return [...msgs];
-          } else {
-            // Finalize thinking if open
-            const updated = msgs.map((m) =>
-              m.isThinking ? { ...m, isThinking: false } : m,
+          if (lastMsg && lastMsg.role === "assistant") {
+            const targetBlockIndex = lastMsg.blocks.findIndex(
+              (b) => b.index === payload.block_index,
             );
+            
+            let newBlocks = [...lastMsg.blocks];
+            if (targetBlockIndex !== -1) {
+              newBlocks[targetBlockIndex] = {
+                ...newBlocks[targetBlockIndex],
+                content: newBlocks[targetBlockIndex].content + payload.content,
+              };
+            } else {
+              newBlocks.push({
+                index: payload.block_index,
+                type: "text",
+                content: payload.content,
+              });
+            }
+            
             return [
-              ...updated,
-              { role: "assistant", content: payload.content },
+              ...msgs.slice(0, -1),
+              { ...lastMsg, blocks: newBlocks, isThinking: false }
+            ];
+          } else {
+            return [
+              ...msgs,
+              {
+                role: "assistant",
+                blocks: [
+                  {
+                    index: payload.block_index,
+                    type: "text",
+                    content: payload.content,
+                  },
+                ],
+                isThinking: false,
+              },
             ];
           }
+        });
+      }
+      break;
+
+    case MessageType.RICH_BLOCK:
+      if (payload.session_id === currentSid) {
+        messages.update((msgs) => {
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg && lastMsg.role === "assistant") {
+            return [
+              ...msgs.slice(0, -1),
+              { ...lastMsg, blocks: [...lastMsg.blocks, payload.block] }
+            ];
+          }
+          return msgs;
         });
       }
       break;
@@ -153,24 +201,25 @@ function handleSocketMessage(payload: any) {
       if (payload.session_id === currentSid) {
         messages.update((msgs) => {
           let lastMsg = msgs[msgs.length - 1];
-          if (lastMsg && lastMsg.role === "assistant" && lastMsg.isThinking) {
+          if (lastMsg && lastMsg.role === "assistant") {
+            let newThought = lastMsg.thought || "";
             if (payload.data) {
               if (payload.data.type === "thought") {
-                lastMsg.thought =
-                  (lastMsg.thought || "") + payload.data.content;
+                newThought += payload.data.content;
               } else if (payload.data.type === "tool_call") {
-                lastMsg.thought =
-                  (lastMsg.thought || "") +
-                  `\n\n**Tool Call:** ${payload.data.tool}\n\n`;
+                newThought += `\n\n**Tool Call:** ${payload.data.tool}\n\n`;
               }
             }
-            return [...msgs];
+            return [
+              ...msgs.slice(0, -1),
+              { ...lastMsg, thought: newThought, isThinking: true }
+            ];
           } else {
             return [
               ...msgs,
               {
                 role: "assistant",
-                content: "",
+                blocks: [],
                 thought: payload.data?.content || "",
                 isThinking: true,
               },
@@ -186,17 +235,24 @@ function handleSocketMessage(payload: any) {
         messages.update((msgs) => {
           const lastMsg = msgs[msgs.length - 1];
           if (lastMsg && lastMsg.role === "assistant") {
-            lastMsg.content = payload.content;
-            lastMsg.metrics = payload.metrics;
-            lastMsg.isThinking = false;
-            return [...msgs];
+            return [
+              ...msgs.slice(0, -1),
+              { ...lastMsg, metrics: payload.metrics, isThinking: false }
+            ];
           }
           return [
             ...msgs,
             {
               role: "assistant",
-              content: payload.content,
+              blocks: [
+                {
+                  index: 0,
+                  type: "text",
+                  content: payload.content,
+                },
+              ],
               metrics: payload.metrics,
+              isThinking: false,
             },
           ];
         });
@@ -233,21 +289,13 @@ export async function loadHistory(sessionId: string) {
 
   const history: Message[] = [];
   data.history.forEach((msg: any) => {
-    if (msg.role === "user") {
-      history.push({
-        role: "user",
-        content: msg.content,
-        attachments: msg.attachments,
-      });
-    } else {
-      history.push({
-        role: "assistant",
-        content: msg.content,
-        thought: msg.thought,
-        metrics: msg.metrics,
-        attachments: msg.attachments,
-      });
-    }
+    history.push({
+      role: msg.role,
+      blocks: msg.blocks,
+      thought: msg.thought,
+      metrics: msg.metrics,
+      attachments: msg.attachments,
+    });
   });
   messages.set(history);
 }
@@ -300,7 +348,10 @@ export function sendMessage(content: string, attachments: Attachment[] = []) {
   if (!sid || !socket || socket.readyState !== WebSocket.OPEN) return;
 
   isGenerating.set(true);
-  messages.update((msgs) => [...msgs, { role: "user", content, attachments }]);
+  messages.update((msgs) => [
+    ...msgs,
+    { role: "user", blocks: [{ index: 0, type: "text", content }], attachments },
+  ]);
 
   socket.send(
     JSON.stringify({

@@ -4,6 +4,7 @@
     import ThinkingProcess from "./ThinkingProcess.svelte";
     import { cn } from "$lib/utils";
     import Attachment from "./Attachment.svelte";
+    import DynamicChart from "./DynamicChart.svelte";
 
     let { message }: { message: Message } = $props();
 
@@ -43,8 +44,21 @@
             />
         {/if}
 
-        {#if message.content}
-            <Markdown content={message.content} />
+        {#if message.blocks && message.blocks.length > 0}
+            <div class="flex flex-col gap-4">
+                {#each message.blocks as block (block.index)}
+                    {#if block.type === "text"}
+                        <Markdown content={block.content} />
+                    {:else if block.type === "chart"}
+                        <DynamicChart 
+                            type={block.content.chart_type} 
+                            title={block.content.title} 
+                            data={block.content.data} 
+                            config={block.content.config} 
+                        />
+                    {/if}
+                {/each}
+            </div>
         {/if}
 
         {#if message.metrics && isAssistant}

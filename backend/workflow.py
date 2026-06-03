@@ -13,7 +13,7 @@ from pypdf import PdfReader
 from agent import execute_tool, get_completion_args, get_tools_schema
 from config import settings
 from memory import add_memory, search_memories
-from models import Attachment, ChatMessage, Metrics
+from models import Attachment, ChatMessage, Metrics, Block
 from prompts import (
     STARTING_PROMPT_TEMPLATE,
 )
@@ -28,6 +28,7 @@ class ThoughtEvent(BaseModel):
 
 class ContentEvent(BaseModel):
     content: str
+    block_index: int
 
 
 class ToolCallFunction(BaseModel):
@@ -46,6 +47,10 @@ class ToolCallEvent(BaseModel):
     tool_kwargs: dict
 
 
+class RichBlockEvent(BaseModel):
+    block: Block
+
+
 class ErrorEvent(BaseModel):
     error: str
 
@@ -57,6 +62,12 @@ class WarningEvent(BaseModel):
 class FinalResponseEvent(BaseModel):
     content: str
     metrics: Optional[Dict[str, Any]] = None
+
+
+def build_rich_block(tool_name: str, args: dict, index: int) -> Optional[Block]:
+    if tool_name == "draw_chart":
+        return Block(index=index, type="chart", content=args)
+    return None
 
 
 class AgentExecutor:
@@ -197,6 +208,8 @@ class AgentExecutor:
         should_stop = False
         start_time = time.time()
         total_completion_tokens = 0
+        block_index = 0
+        current_text_block_active = False
 
         try:
             while not should_stop:
@@ -244,7 +257,9 @@ class AgentExecutor:
                         # Handle Content
                         if delta.content:
                             current_content += delta.content
-                            yield ContentEvent(content=delta.content)
+                            if not current_text_block_active:
+                                current_text_block_active = True
+                            yield ContentEvent(content=delta.content, block_index=block_index)
 
                         # Handle Tool Calls
                         if delta.tool_calls:
@@ -276,20 +291,28 @@ class AgentExecutor:
                         final_content = current_content
 
                 if tool_calls:
+                    if current_text_block_active:
+                        block_index += 1
+                        current_text_block_active = False
+
                     tool_calls_dict = [tc.model_dump() for tc in tool_calls]
                     assistant_msg["tool_calls"] = tool_calls_dict
                     self.state["chat_history"].append(assistant_msg)
 
                     for tc in tool_calls:
                         name = tc.function.name
-
                         args_str = tc.function.arguments
                         try:
                             args = json.loads(args_str) if args_str else {}
                         except json.JSONDecodeError:
                             args = {}
 
-                        yield ToolCallEvent(tool_name=name, tool_kwargs=args)
+                        block = build_rich_block(name, args, block_index)
+                        if block:
+                            yield RichBlockEvent(block=block)
+                            block_index += 1
+                        else:
+                            yield ToolCallEvent(tool_name=name, tool_kwargs=args)
 
                         result = execute_tool(name, args)
                         self.state["chat_history"].append(
@@ -345,7 +368,7 @@ class AgentExecutor:
                 history.append(
                     ChatMessage(
                         role="user",
-                        content=msg.get("content", ""),
+                        blocks=[Block(index=0, type="text", content=msg.get("content", ""))],
                         attachments=msg.get("attachments"),
                     )
                 )
@@ -353,8 +376,10 @@ class AgentExecutor:
                 if history and history[-1].role == "assistant":
                     target = history[-1]
                 else:
-                    target = ChatMessage(role="assistant", content="")
+                    target = ChatMessage(role="assistant", blocks=[])
                     history.append(target)
+
+                block_index = len(target.blocks)
 
                 new_thought = msg.get("thought", "")
                 for tc in msg.get("tool_calls", []):
@@ -366,11 +391,24 @@ class AgentExecutor:
 
                 new_content = msg.get("content", "")
                 if new_content:
-                    target.content = (
-                        f"{target.content}\n\n{new_content}"
-                        if target.content
-                        else new_content
-                    )
+                    if target.blocks and target.blocks[-1].type == "text":
+                        target.blocks[-1].content += "\n\n" + new_content
+                    else:
+                        target.blocks.append(Block(index=block_index, type="text", content=new_content))
+                        block_index += 1
+
+                for tc in msg.get("tool_calls", []):
+                    name = tc.get("function", {}).get("name", "unknown")
+                    args_str = tc.get("function", {}).get("arguments", "{}")
+                    try:
+                        args = json.loads(args_str) if args_str else {}
+                    except json.JSONDecodeError:
+                        args = {}
+                    
+                    block = build_rich_block(name, args, block_index)
+                    if block:
+                        target.blocks.append(block)
+                        block_index += 1
 
                 if msg.get("metrics"):
                     target.metrics = Metrics(**msg["metrics"])
