@@ -54,7 +54,8 @@
                             type={block.content.chart_type} 
                             title={block.content.title} 
                             data={block.content.data} 
-                            config={block.content.config} 
+                            labelKey={block.content.label_key}
+                            valueKeys={block.content.value_keys}
                         />
                     {/if}
                 {/each}
