@@ -21,13 +21,27 @@
     );
 
     // Create a chart config for the UI components
-    const chartConfig = $derived(valueKeys.reduce((acc: any, key: string, i: number) => {
-        acc[key] = {
-            label: key.charAt(0).toUpperCase() + key.slice(1),
-            color: `var(--color-chart-${(i % 5) + 1})`
-        };
-        return acc;
-    }, {}));
+    const chartConfig = $derived.by(() => {
+        if (type === "pie") {
+            return parsedData.reduce((acc: any, item: any) => {
+                const key = item[labelKey];
+                if (!acc[key]) {
+                    acc[key] = {
+                        label: key,
+                        color: `var(--color-chart-${(Object.keys(acc).length % 5) + 1})`
+                    };
+                }
+                return acc;
+            }, {});
+        }
+        return valueKeys.reduce((acc: any, key: string, i: number) => {
+            acc[key] = {
+                label: key.charAt(0).toUpperCase() + key.slice(1),
+                color: "var(--color-primary)"
+            };
+            return acc;
+        }, {});
+    });
 
     // Range of colors for Pie chart using the theme's chart colors
     const pieRange = [
@@ -45,14 +59,15 @@
     </CardHeader>
     <CardContent>
         {#if type === "pie"}
-            <div class="aspect-video w-full">
+            <ChartUI.ChartContainer config={chartConfig} class="aspect-video w-full">
                 <PieChart 
                     data={parsedData} 
-                    key={valueKeys[0]} 
+                    key={labelKey}
+                    value={valueKeys[0]}
                     c={labelKey}
                     cRange={pieRange}
                 />
-            </div>
+            </ChartUI.ChartContainer>
         {:else}
             <ChartUI.ChartContainer config={chartConfig} class="aspect-[16/9] w-full">
                 <Chart 
@@ -62,20 +77,18 @@
                     padding={{ left: 16, bottom: 48, top: 16, right: 16 }}
                 >
                     <Svg>
-                        {#if type !== "pie"}
-                            <Axis 
-                                placement="bottom" 
-                                grid={{ class: "stroke-muted/20" }} 
-                                tickLabelProps={{ 
-                                    rotate: -45, 
-                                    textAnchor: 'end', 
-                                    verticalAnchor: 'middle',
-                                    dx: -4,
-                                    dy: 4
-                                }}
-                            />
-                            <Axis placement="left" grid={{ class: "stroke-muted/20" }} />
-                        {/if}
+                        <Axis 
+                            placement="bottom" 
+                            grid={{ class: "stroke-muted/20" }} 
+                            tickLabelProps={{ 
+                                rotate: -45, 
+                                textAnchor: 'end', 
+                                verticalAnchor: 'middle',
+                                dx: -4,
+                                dy: 4
+                            }}
+                        />
+                        <Axis placement="left" grid={{ class: "stroke-muted/20" }} />
                         
                         {#if type === "bar"}
                             <Bars radius={4} strokeWidth={0} fill="var(--color-primary)" />

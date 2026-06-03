@@ -1,16 +1,22 @@
 <script lang="ts">
 	import { marked } from 'marked';
 	import markedKatex from 'marked-katex-extension';
+	import { gfmHeadingId } from 'marked-gfm-heading-id';
+	import { mangle } from 'marked-mangle';
 	import DOMPurify from 'dompurify';
 	import 'katex/dist/katex.min.css';
 
 	let { content = '' } = $props();
 
-	// Configure marked with katex extension
-	marked.use(markedKatex({
-		throwOnError: false,
-		displayMode: false
-	}));
+	// Configure marked with extensions
+	marked.use(
+		markedKatex({
+			throwOnError: false,
+			displayMode: false
+		}),
+		gfmHeadingId(),
+		mangle()
+	);
 
 	const html = $derived.by(() => {
 		const rawHtml = marked.parse(content) as string;

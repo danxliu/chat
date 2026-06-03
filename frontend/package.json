@@ -47,6 +47,8 @@
 		"vite": "^8.0.7"
 	},
 	"dependencies": {
-		"dompurify": "^3.4.7"
+		"dompurify": "^3.4.7",
+		"marked-gfm-heading-id": "^4.1.4",
+		"marked-mangle": "^1.1.13"
 	}
 }
