@@ -1,4 +1,4 @@
-import { writable, get } from "svelte/store";
+import { writable, get, derived } from "svelte/store";
 import { toast } from "svelte-sonner";
 import { settings } from "./settings";
 
@@ -52,6 +52,10 @@ export const isGenerating = writable(false);
 export const isConnected = writable(false);
 export const models = writable<string[]>([]);
 export const selectedModel = writable<string>("");
+export const activeModel = derived(
+  [selectedModel, settings],
+  ([$selectedModel, $settings]) => $settings.llmModel || $selectedModel,
+);
 export const enableReasoning = writable(true);
 
 let socket: WebSocket | null = null;
@@ -289,7 +293,7 @@ export async function loadModels() {
 
 export function sendMessage(content: string, attachments: Attachment[] = []) {
   const sid = get(currentSessionId);
-  const model = get(selectedModel);
+  const model = get(activeModel);
   const reasoning = get(enableReasoning);
   const currentSettings = get(settings);
 
@@ -303,7 +307,7 @@ export function sendMessage(content: string, attachments: Attachment[] = []) {
       type: MessageType.MESSAGE,
       session_id: sid,
       content,
-      model: currentSettings.llmModel || model,
+      model,
       attachments,
       enable_reasoning: reasoning,
       llm_api_base: currentSettings.llmBaseUrl || undefined,

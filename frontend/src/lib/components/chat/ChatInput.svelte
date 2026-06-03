@@ -3,19 +3,12 @@
         sendMessage,
         isGenerating,
         cancelGeneration,
-        models,
-        selectedModel,
+        activeModel,
         enableReasoning,
     } from "$lib/stores/chat";
     import { Button } from "$lib/components/ui/button";
     import { Textarea } from "$lib/components/ui/textarea";
-    import {
-        Select,
-        SelectContent,
-        SelectItem,
-        SelectTrigger,
-        SelectValue,
-    } from "$lib/components/ui/select";
+    import { Badge } from "$lib/components/ui/badge";
     import { Switch } from "$lib/components/ui/switch";
     import { Label } from "$lib/components/ui/label";
     import {
@@ -23,6 +16,7 @@
         Square,
         Paperclip,
         BrainCircuit,
+        Cpu,
         X,
         Upload,
     } from "lucide-svelte";
@@ -208,22 +202,10 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <Select type="single" bind:value={$selectedModel}>
-                    <SelectTrigger
-                        class="w-[200px] h-8 text-xs border-0 bg-muted/50 focus:ring-0"
-                    >
-                        <SelectValue placeholder="Select model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {#each $models as model}
-                            <SelectItem
-                                value={model}
-                                label={model}
-                                class="text-xs">{model}</SelectItem
-                            >
-                        {/each}
-                    </SelectContent>
-                </Select>
+                <Badge variant="outline" class="h-8 gap-1.5 px-3 font-medium bg-muted/30 border-0">
+                    <Cpu class="h-3.5 w-3.5 text-muted-foreground" />
+                    <span class="text-xs">{$activeModel}</span>
+                </Badge>
 
                 <Button
                     variant={$isGenerating ? "destructive" : "default"}
