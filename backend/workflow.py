@@ -67,6 +67,8 @@ class FinalResponseEvent(BaseModel):
 def build_rich_block(tool_name: str, args: dict, index: int) -> Optional[Block]:
     if tool_name == "draw_chart":
         return Block(index=index, type="chart", content=args)
+    if tool_name == "suggest_continuations":
+        return Block(index=index, type="continuations", content=args)
     return None
 
 

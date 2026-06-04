@@ -5,6 +5,7 @@
     import { cn } from "$lib/utils";
     import Attachment from "./Attachment.svelte";
     import DynamicChart from "./DynamicChart.svelte";
+    import Continuations from "./Continuations.svelte";
 
     let { message }: { message: Message } = $props();
 
@@ -57,6 +58,8 @@
                             labelKey={block.content.label_key}
                             valueKeys={block.content.value_keys}
                         />
+                    {:else if block.type === "continuations"}
+                        <Continuations continuations={block.content.continuations} />
                     {/if}
                 {/each}
             </div>

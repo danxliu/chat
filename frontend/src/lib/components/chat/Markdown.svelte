@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { marked } from 'marked';
+	import { Marked } from 'marked';
 	import markedKatex from 'marked-katex-extension';
 	import { gfmHeadingId } from 'marked-gfm-heading-id';
 	import { mangle } from 'marked-mangle';
@@ -8,8 +8,7 @@
 
 	let { content = '' } = $props();
 
-	// Configure marked with extensions
-	marked.use(
+	const marked = new Marked(
 		markedKatex({
 			throwOnError: false,
 			displayMode: false
@@ -24,7 +23,7 @@
 	});
 </script>
 
-<div class="markdown-body prose prose-slate max-w-none dark:prose-invert">
+<div class="markdown-body max-w-none">
 	{@html html}
 </div>
 
@@ -49,6 +48,24 @@
 	}
 	:global(.markdown-body p:last-child) {
 		margin-bottom: 0;
+	}
+	:global(.markdown-body h1) {
+		font-size: 1.5rem;
+		font-weight: 700;
+		margin-top: 1.5rem;
+		margin-bottom: 1rem;
+	}
+	:global(.markdown-body h2) {
+		font-size: 1.25rem;
+		font-weight: 600;
+		margin-top: 1.25rem;
+		margin-bottom: 0.75rem;
+	}
+	:global(.markdown-body h3) {
+		font-size: 1.125rem;
+		font-weight: 600;
+		margin-top: 1rem;
+		margin-bottom: 0.5rem;
 	}
 	:global(.markdown-body ul) {
 		list-style-type: disc;
