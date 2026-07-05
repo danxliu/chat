@@ -8,11 +8,13 @@ RUN bun run build
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS backend-builder
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 WORKDIR /app/backend
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends build-essential
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=backend/uv.lock,target=uv.lock \
     --mount=type=bind,source=backend/pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev --verbose
+    uv sync --frozen --no-install-project --no-dev
 
 FROM python:3.13-slim-bookworm
 ENV PYTHONUNBUFFERED=1 \

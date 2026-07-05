@@ -1,4 +1,3 @@
-import os
 import shutil
 import uuid
 from pathlib import Path
@@ -64,7 +63,7 @@ async def list_models():
 @router.get("/config")
 async def get_backend_config():
     return {
-        "default_model": settings.default_model,
+        "model": settings.model,
     }
 
 

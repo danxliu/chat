@@ -14,7 +14,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -25,12 +24,27 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# Ensure uploads directory exists
+# Ensure required directories exist
 settings.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Mount static files and API routes
 app.mount("/uploads", StaticFiles(directory=str(settings.UPLOADS_DIR)), name="uploads")
-
 app.include_router(api_router)
+
+# Serve the SvelteKit frontend if built
+_frontend = settings.FRONTEND_BUILD_DIR
+if _frontend.exists():
+    # Mount immutable build assets at /_app
+    assets_dir = _frontend / "_app"
+    if assets_dir.exists():
+        app.mount("/_app", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = _frontend / full_path
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(_frontend / "index.html"))
 
 
 @app.get("/")
@@ -38,23 +52,7 @@ async def get_index():
     index_path = settings.FRONTEND_BUILD_DIR / "index.html"
     if index_path.exists():
         return FileResponse(str(index_path))
-    return {
-        "message": "Frontend not built yet. Run 'bun run build' in the frontend directory."
-    }
-
-
-if settings.FRONTEND_BUILD_DIR.exists():
-    # Mount SvelteKit build assets separately so API routes take priority
-    assets_dir = settings.FRONTEND_BUILD_DIR / "_app"
-    if assets_dir.exists():
-        app.mount("/_app", StaticFiles(directory=str(assets_dir)), name="assets")
-
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        file_path = settings.FRONTEND_BUILD_DIR / full_path
-        if file_path.exists() and file_path.is_file():
-            return FileResponse(str(file_path))
-        return FileResponse(str(settings.FRONTEND_BUILD_DIR / "index.html"))
+    return {"message": "Frontend not built."}
 
 
 if __name__ == "__main__":

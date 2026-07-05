@@ -11,17 +11,17 @@ This is a Python-based AI agent application named `agent`. It leverages the `Lit
 - **Pydantic / Pydantic Settings**: Data validation and configuration management.
 - **uv**: Fast Python package installer and resolver.
 - **Frontend**:
-    - **Vanilla JS/CSS/HTML**: Core frontend implementation.
+    - **SvelteKit**: Full-stack framework with static adapter.
+    - **Tailwind CSS + shadcn-svelte**: UI styling and components.
     - **Marked.js**: Markdown rendering.
     - **KaTeX**: LaTeX math rendering.
     - **DOMPurify**: HTML sanitization.
-    - **Material Symbols**: UI icons.
+    - **LayerChart**: Interactive charting.
 
 ### Architecture
 - `main.py`: The entry point that initializes the FastAPI app and handles WebSockets.
 - `workflow.py`: Contains the `AgentExecutor` class, which manages the LLM chat loop. The agent is fully autonomous and will continue looping until it sends a message without calling any tools, which naturally terminates the loop.
-- `agent.py`: Returns the list of available tool functions.
-- `agent_factory.py`: Provides default completion arguments for LiteLLM.
+- `agent.py`: Returns the list of available tool functions and provides default completion arguments for LiteLLM.
 - `storage.py`: Manages Redis-based storage for session context and titles using raw JSON.
 - `config.py`: Defines the `Settings` model using Pydantic, loading configuration from a `.env` file.
 
@@ -37,11 +37,10 @@ Enter the development shell. This will automatically sync dependencies using `uv
 devenv shell
 ```
 
-### Configuration
+## Configuration
 Create a `.env` file in the root directory to override default settings:
 ```env
 LLM_API_BASE=http://localhost:13305/v1
-EMBED_API_BASE=http://localhost:8081/v1
 API_KEY=your-api-key
 MODEL=your-model-name
 MAX_TOKENS=8192

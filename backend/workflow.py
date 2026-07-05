@@ -3,7 +3,6 @@ import json
 import logging
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import litellm
@@ -77,8 +76,10 @@ class AgentExecutor:
         self.state: Dict[str, Any] = {}
 
     async def _load_state(self):
-        self.state = await chat_storage.load_context(self.session_id)
-        if not self.state:
+        state = await chat_storage.load_context(self.session_id)
+        if state:
+            self.state = state
+        else:
             self.state = {
                 "chat_history": [],
                 "metadata": {"session_id": self.session_id},
@@ -108,13 +109,12 @@ class AgentExecutor:
                 if not stored_filename:
                     continue
 
-                file_path = Path("uploads") / stored_filename
+                file_path = settings.UPLOADS_DIR / stored_filename
                 if not file_path.exists():
                     continue
 
                 if mime_type.startswith("image/"):
-                    with open(file_path, "rb") as f:
-                        base64_data = base64.b64encode(f.read()).decode("utf-8")
+                    base64_data = base64.b64encode(file_path.read_bytes()).decode()
                     processed_attachments.append(
                         {
                             "type": "image_url",
@@ -126,17 +126,16 @@ class AgentExecutor:
                 elif mime_type == "application/pdf":
                     try:
                         reader = PdfReader(file_path)
-                        text = ""
-                        for page in reader.pages:
-                            text += page.extract_text() + "\n"
+                        text = "".join(
+                            page.extract_text() + "\n" for page in reader.pages
+                        )
                         extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
                     except Exception as e:
                         logger.error(f"Error reading PDF {filename}: {e}")
                         extra_content += f"\n\nError reading PDF {filename}: {e}\n"
                 else:
                     try:
-                        with open(file_path, "r", encoding="utf-8") as f:
-                            text = f.read()
+                        text = file_path.read_text(encoding="utf-8")
                         extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
                     except Exception as e:
                         logger.error(f"Error reading text file {filename}: {e}")

@@ -8,7 +8,6 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - LLM_API_BASE
-      - EMBED_API_BASE
       - API_KEY
       - MODEL
       - MAX_TOKENS
@@ -16,8 +15,8 @@ services:
       - FREQUENCY_PENALTY
       - PRESENCE_PENALTY
       - STEP_THRESHOLD
-      - MEM0_DIR
-      - EMBEDDING_MODEL
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       - redis
 
@@ -31,3 +30,4 @@ services:
 
 volumes:
   redis_data:
+  uploads_data:

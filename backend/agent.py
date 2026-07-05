@@ -89,8 +89,8 @@ def get_completion_args(model: str) -> Dict[str, Any]:
     """Returns the default arguments for LiteLLM completion."""
     return {
         "model": f"openai/{model}",
-        "api_base": settings.opencode_api_base,
-        "api_key": settings.opencode_api_key,
+        "api_base": settings.llm_api_base,
+        "api_key": settings.api_key,
         "temperature": settings.temperature,
         "max_tokens": settings.max_tokens,
         "frequency_penalty": settings.frequency_penalty,

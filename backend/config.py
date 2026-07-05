@@ -1,11 +1,10 @@
-import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Pydantic model to manage configuration from .env"""
+    """Application configuration loaded from environment variables and .env file."""
 
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).resolve().parent.parent / ".env"),
@@ -17,11 +16,10 @@ class Settings(BaseSettings):
     UPLOADS_DIR: Path = BASE_DIR / "uploads"
     FRONTEND_BUILD_DIR: Path = BASE_DIR / "frontend" / "build"
 
-    # OpenCode Go API
-    opencode_api_base: str = ""
-    opencode_api_key: str = ""
-
-    default_model: str = ""
+    # LLM API
+    llm_api_base: str = ""
+    api_key: str = ""
+    model: str = ""
 
     # Completion defaults
     max_tokens: int = 32768
