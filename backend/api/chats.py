@@ -5,11 +5,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from memory import reset_memory
-from storage import chat_storage
-from workflow import AgentExecutor
 from config import settings
 from models import AVAILABLE_MODELS, HistoryResponse
+from storage import chat_storage
+from workflow import AgentExecutor
 
 router = APIRouter(prefix="/api/chats")
 
@@ -65,17 +64,8 @@ async def list_models():
 @router.get("/config")
 async def get_backend_config():
     return {
-        "llm_model": settings.model,
-        "llm_api_base": settings.llm_api_base,
-        "embedding_model": settings.embedding_model,
-        "embed_api_base": settings.embed_api_base,
+        "default_model": settings.default_model,
     }
-
-
-@router.delete("/memory")
-async def clear_memory():
-    reset_memory()
-    return {"status": "success"}
 
 
 @router.get("/{session_id}/history", response_model=HistoryResponse)

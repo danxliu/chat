@@ -5,12 +5,12 @@ from pydantic import create_model
 from pydantic.main import BaseModel
 
 from config import settings
+from tools.draw_chart import draw_chart
 from tools.execute_python import execute_python
 from tools.finance import get_stock_data, get_stock_history
+from tools.suggest_continuations import suggest_continuations
 from tools.web_scrape import web_scrape
 from tools.web_search import web_search
-from tools.draw_chart import draw_chart
-from tools.suggest_continuations import suggest_continuations
 
 
 def get_tools() -> List[Callable]:
@@ -85,12 +85,12 @@ def execute_tool(name: str, kwargs: Dict[str, Any]) -> str:
         return f"Error executing tool '{name}': {e}"
 
 
-def get_completion_args(model: str, api_base: str | None = None) -> Dict[str, Any]:
+def get_completion_args(model: str) -> Dict[str, Any]:
     """Returns the default arguments for LiteLLM completion."""
     return {
-        "model": model,
-        "api_base": api_base or settings.llm_api_base,
-        "api_key": settings.api_key,
+        "model": f"openai/{model}",
+        "api_base": settings.opencode_api_base,
+        "api_key": settings.opencode_api_key,
         "temperature": settings.temperature,
         "max_tokens": settings.max_tokens,
         "frequency_penalty": settings.frequency_penalty,

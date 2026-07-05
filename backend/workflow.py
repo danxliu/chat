@@ -12,8 +12,7 @@ from pypdf import PdfReader
 
 from agent import execute_tool, get_completion_args, get_tools_schema
 from config import settings
-from memory import add_memory, search_memories
-from models import Attachment, ChatMessage, Metrics, Block
+from models import Attachment, Block, ChatMessage, Metrics
 from prompts import (
     STARTING_PROMPT_TEMPLATE,
 )
@@ -88,38 +87,12 @@ class AgentExecutor:
     async def _save_state(self):
         await chat_storage.save_context(self.session_id, self.state)
 
-    async def _generate_title(self, query: str) -> Optional[str]:
-        try:
-            logger.info(f"Generating new title for session {self.session_id}...")
-            title = (query[:50] + "...") if len(query) > 50 else query
-            await chat_storage.save_title(self.session_id, title)
-            logger.info(f"Generated title for session {self.session_id}: {title}")
-            return title
-        except Exception:
-            logger.exception(f"Failed to generate title for session {self.session_id}")
-            return None
-
-    async def get_title(self, query: str) -> Optional[str]:
-        existing_title = await chat_storage.get_title(self.session_id)
-        if existing_title:
-            logger.info(
-                f"Using existing title for session {self.session_id}: {existing_title}"
-            )
-            return existing_title
-        logger.info(
-            f"Generating new title for session {self.session_id} based on query: {query}"
-        )
-        return await self._generate_title(query)
-
     async def run(
         self,
         query: str,
         model_name: str,
         attachments: Optional[List[dict]] = None,
         enable_reasoning: bool = True,
-        llm_api_base: Optional[str] = None,
-        embedding_model: Optional[str] = None,
-        embed_api_base: Optional[str] = None,
     ) -> AsyncGenerator[Any, None]:
         await self._load_state()
 
@@ -175,20 +148,9 @@ class AgentExecutor:
         )
         await self._save_state()
 
-        # Fetch relevant memories
-        memories = search_memories(
-            query, embedding_model=embedding_model, embed_api_base=embed_api_base
-        )
-        memory_str = (
-            "\n".join(f"- {m}" for m in memories)
-            if memories
-            else "No previous memories found."
-        )
-
         formatted_query_text = STARTING_PROMPT_TEMPLATE.format(
             query=full_query,
             current_date=datetime.now().strftime("%A, %B %d, %Y"),
-            memory=memory_str,
         )
 
         # Build multi-modal message if there are images
@@ -198,7 +160,7 @@ class AgentExecutor:
         else:
             user_content = formatted_query_text
 
-        completion_args = get_completion_args(model=model_name, api_base=llm_api_base)
+        completion_args = get_completion_args(model=model_name)
         completion_args["tools"] = get_tools_schema()
         completion_args["tool_choice"] = "auto"
         completion_args["extra_body"] = {
@@ -261,7 +223,9 @@ class AgentExecutor:
                             current_content += delta.content
                             if not current_text_block_active:
                                 current_text_block_active = True
-                            yield ContentEvent(content=delta.content, block_index=block_index)
+                            yield ContentEvent(
+                                content=delta.content, block_index=block_index
+                            )
 
                         # Handle Tool Calls
                         if delta.tool_calls:
@@ -352,13 +316,6 @@ class AgentExecutor:
             yield ErrorEvent(error=str(e))
         finally:
             await self._save_state()
-            # Store new memories from the interaction
-            if final_content:
-                add_memory(
-                    f"User: {query}\nAssistant: {final_content}",
-                    embedding_model=embedding_model,
-                    embed_api_base=embed_api_base,
-                )
 
     async def get_history(self) -> List[ChatMessage]:
         await self._load_state()
@@ -370,7 +327,9 @@ class AgentExecutor:
                 history.append(
                     ChatMessage(
                         role="user",
-                        blocks=[Block(index=0, type="text", content=msg.get("content", ""))],
+                        blocks=[
+                            Block(index=0, type="text", content=msg.get("content", ""))
+                        ],
                         attachments=msg.get("attachments"),
                     )
                 )
@@ -396,7 +355,9 @@ class AgentExecutor:
                     if target.blocks and target.blocks[-1].type == "text":
                         target.blocks[-1].content += "\n\n" + new_content
                     else:
-                        target.blocks.append(Block(index=block_index, type="text", content=new_content))
+                        target.blocks.append(
+                            Block(index=block_index, type="text", content=new_content)
+                        )
                         block_index += 1
 
                 for tc in msg.get("tool_calls", []):
@@ -406,7 +367,7 @@ class AgentExecutor:
                         args = json.loads(args_str) if args_str else {}
                     except json.JSONDecodeError:
                         args = {}
-                    
+
                     block = build_rich_block(name, args, block_index)
                     if block:
                         target.blocks.append(block)

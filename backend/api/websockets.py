@@ -1,12 +1,11 @@
 import asyncio
 import logging
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError, model_validator
 
-from models import AVAILABLE_MODELS
 from storage import chat_storage
 from workflow import (
     AgentExecutor,
@@ -21,8 +20,6 @@ from workflow import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-active_title_generations: Set[str] = set()
 
 
 class MessageType(str, Enum):
@@ -45,9 +42,6 @@ class IncomingPayload(BaseModel):
     model: Optional[str] = None
     attachments: Optional[List[dict]] = None
     enable_reasoning: bool = True
-    llm_api_base: Optional[str] = None
-    embedding_model: Optional[str] = None
-    embed_api_base: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_payload(self) -> "IncomingPayload":
@@ -107,31 +101,23 @@ class ConnectionManager:
             task.cancel()
 
 
-async def generate_title(session_id: str, query: str, conn: ConnectionManager):
-    if session_id in active_title_generations:
-        return
-    try:
-        if await chat_storage.get_title(session_id) not in (None, "New Chat"):
-            return
-        active_title_generations.add(session_id)
-        title = await AgentExecutor(session_id).get_title(query)
-        if not title:
-            return
+async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
+    # Generate title from first message if one doesn't exist yet
+    existing_title = await chat_storage.get_title(payload.session_id)
+    if existing_title in (None, "New Chat"):
+        new_title = (
+            (payload.content[:50] + "...")
+            if len(payload.content) > 50
+            else payload.content
+        )
+        await chat_storage.save_title(payload.session_id, new_title)
         await conn.send(
             {
                 "type": MessageType.TITLE_UPDATE.value,
-                "session_id": session_id,
-                "title": title,
+                "session_id": payload.session_id,
+                "title": new_title,
             }
         )
-    except Exception:
-        logger.exception(f"Failed title generation for {session_id}")
-    finally:
-        active_title_generations.discard(session_id)
-
-
-async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
-    conn.spawn_task(generate_title(payload.session_id, payload.content, conn))
 
     cancel_event = conn.get_cancel_event(payload.session_id)
     cancel_event.clear()
@@ -146,9 +132,6 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
             model_name=payload.model,
             attachments=payload.attachments,
             enable_reasoning=payload.enable_reasoning,
-            llm_api_base=payload.llm_api_base,
-            embedding_model=payload.embedding_model,
-            embed_api_base=payload.embed_api_base,
         ):
             if cancel_event.is_set():
                 logger.info(f"Session {payload.session_id} cancelled.")

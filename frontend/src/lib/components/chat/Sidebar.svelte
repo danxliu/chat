@@ -10,26 +10,8 @@
     import { Button } from "$lib/components/ui/button";
     import { Separator } from "$lib/components/ui/separator";
     import { ScrollArea } from "$lib/components/ui/scroll-area";
-    import SettingsDialog from "./SettingsDialog.svelte";
-    import {
-        Plus,
-        MessageSquare,
-        Trash2,
-        Database,
-        Trash,
-    } from "lucide-svelte";
+    import { Plus, MessageSquare, Trash2, Trash } from "lucide-svelte";
     import { cn } from "$lib/utils";
-
-    async function handleDeletePersonalHistory() {
-        if (
-            !confirm(
-                "Are you sure you want to delete your personal history? This will erase all learned memories.",
-            )
-        )
-            return;
-        const res = await fetch("/api/chats/memory", { method: "DELETE" });
-        if (res.ok) alert("Personal history deleted.");
-    }
 
     async function handleClearAllChats() {
         if (!confirm("Are you sure you want to clear ALL chat history?"))
@@ -102,15 +84,5 @@
             <Trash class="h-4 w-4" />
             Clear All Chats
         </Button>
-        <Button
-            variant="ghost"
-            size="sm"
-            class="w-full justify-start gap-2 text-muted-foreground"
-            onclick={handleDeletePersonalHistory}
-        >
-            <Database class="h-4 w-4" />
-            Clear Memory
-        </Button>
-        <SettingsDialog />
     </div>
 </div>

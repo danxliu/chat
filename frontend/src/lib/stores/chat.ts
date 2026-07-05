@@ -1,6 +1,5 @@
-import { writable, get, derived } from "svelte/store";
+import { writable, get } from "svelte/store";
 import { toast } from "svelte-sonner";
-import { settings } from "./settings";
 
 export const MessageType = {
   MESSAGE: "message",
@@ -59,10 +58,7 @@ export const isGenerating = writable(false);
 export const isConnected = writable(false);
 export const models = writable<string[]>([]);
 export const selectedModel = writable<string>("");
-export const activeModel = derived(
-  [selectedModel, settings],
-  ([$selectedModel, $settings]) => $settings.llmModel || $selectedModel,
-);
+export const activeModel = selectedModel;
 export const enableReasoning = writable(true);
 
 let socket: WebSocket | null = null;
@@ -143,7 +139,7 @@ function handleSocketMessage(payload: any) {
             const targetBlockIndex = lastMsg.blocks.findIndex(
               (b) => b.index === payload.block_index,
             );
-            
+
             let newBlocks = [...lastMsg.blocks];
             if (targetBlockIndex !== -1) {
               newBlocks[targetBlockIndex] = {
@@ -157,10 +153,10 @@ function handleSocketMessage(payload: any) {
                 content: payload.content,
               });
             }
-            
+
             return [
               ...msgs.slice(0, -1),
-              { ...lastMsg, blocks: newBlocks, isThinking: false }
+              { ...lastMsg, blocks: newBlocks, isThinking: false },
             ];
           } else {
             return [
@@ -189,7 +185,7 @@ function handleSocketMessage(payload: any) {
           if (lastMsg && lastMsg.role === "assistant") {
             return [
               ...msgs.slice(0, -1),
-              { ...lastMsg, blocks: [...lastMsg.blocks, payload.block] }
+              { ...lastMsg, blocks: [...lastMsg.blocks, payload.block] },
             ];
           }
           return msgs;
@@ -212,7 +208,7 @@ function handleSocketMessage(payload: any) {
             }
             return [
               ...msgs.slice(0, -1),
-              { ...lastMsg, thought: newThought, isThinking: true }
+              { ...lastMsg, thought: newThought, isThinking: true },
             ];
           } else {
             return [
@@ -237,7 +233,7 @@ function handleSocketMessage(payload: any) {
           if (lastMsg && lastMsg.role === "assistant") {
             return [
               ...msgs.slice(0, -1),
-              { ...lastMsg, metrics: payload.metrics, isThinking: false }
+              { ...lastMsg, metrics: payload.metrics, isThinking: false },
             ];
           }
           return [
@@ -343,14 +339,17 @@ export function sendMessage(content: string, attachments: Attachment[] = []) {
   const sid = get(currentSessionId);
   const model = get(activeModel);
   const reasoning = get(enableReasoning);
-  const currentSettings = get(settings);
 
   if (!sid || !socket || socket.readyState !== WebSocket.OPEN) return;
 
   isGenerating.set(true);
   messages.update((msgs) => [
     ...msgs,
-    { role: "user", blocks: [{ index: 0, type: "text", content }], attachments },
+    {
+      role: "user",
+      blocks: [{ index: 0, type: "text", content }],
+      attachments,
+    },
   ]);
 
   socket.send(
@@ -361,9 +360,6 @@ export function sendMessage(content: string, attachments: Attachment[] = []) {
       model,
       attachments,
       enable_reasoning: reasoning,
-      llm_api_base: currentSettings.llmBaseUrl || undefined,
-      embedding_model: currentSettings.embedModel || undefined,
-      embed_api_base: currentSettings.embedBaseUrl || undefined,
     }),
   );
 }

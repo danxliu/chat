@@ -5,12 +5,15 @@
         cancelGeneration,
         activeModel,
         enableReasoning,
+        models,
+        selectedModel,
+        loadModels,
     } from "$lib/stores/chat";
     import { Button } from "$lib/components/ui/button";
     import { Textarea } from "$lib/components/ui/textarea";
-    import { Badge } from "$lib/components/ui/badge";
     import { Switch } from "$lib/components/ui/switch";
     import { Label } from "$lib/components/ui/label";
+    import * as Select from "$lib/components/ui/select";
     import {
         Send,
         Square,
@@ -22,12 +25,25 @@
     } from "lucide-svelte";
     import type { Attachment as AttachmentType } from "$lib/stores/chat";
     import Attachment from "./Attachment.svelte";
+    import { onMount } from "svelte";
 
     let input = $state("");
     let pendingAttachments = $state<AttachmentType[]>([]);
     let isDragging = $state(false);
     let dragCounter = 0;
     let fileInput: HTMLInputElement;
+    let selectedModelValue = $state("");
+
+    onMount(() => {
+        loadModels();
+    });
+
+    $effect(() => {
+        selectedModelValue = $selectedModel;
+    });
+    $effect(() => {
+        selectedModel.set(selectedModelValue);
+    });
 
     function handleKeydown(e: KeyboardEvent) {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -202,10 +218,22 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <Badge variant="outline" class="h-8 gap-1.5 px-3 font-medium bg-muted/30 border-0">
-                    <Cpu class="h-3.5 w-3.5 text-muted-foreground" />
-                    <span class="text-xs">{$activeModel}</span>
-                </Badge>
+                <Select.Root type="single" bind:value={selectedModelValue}>
+                    <Select.Trigger
+                        size="sm"
+                        class="gap-1.5 px-2 font-medium text-xs bg-muted/30 border-0"
+                    >
+                        <Cpu class="h-3.5 w-3.5 text-muted-foreground" />
+                        <Select.Value placeholder="Select model" />
+                    </Select.Trigger>
+                    <Select.Content>
+                        <Select.Group>
+                            {#each $models as m}
+                                <Select.Item value={m} label={m} />
+                            {/each}
+                        </Select.Group>
+                    </Select.Content>
+                </Select.Root>
 
                 <Button
                     variant={$isGenerating ? "destructive" : "default"}
