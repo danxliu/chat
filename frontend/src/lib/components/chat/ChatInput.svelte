@@ -178,7 +178,7 @@
         <Textarea
             bind:value={input}
             placeholder="Type your message..."
-            class="min-h-[80px] max-h-[200px] resize-none border-0 focus-visible:ring-0 shadow-none px-4 pt-4"
+            class="min-h-[120px] max-h-[300px] resize-none border-0 focus-visible:ring-0 shadow-none px-4 pt-4"
             onkeydown={handleKeydown}
             onpaste={handlePaste}
         />

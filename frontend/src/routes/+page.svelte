@@ -13,10 +13,11 @@
 	import Sidebar from '$lib/components/chat/Sidebar.svelte';
 	import ChatMessage from '$lib/components/chat/ChatMessage.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
-	import { MessageSquare, Sun, Moon } from 'lucide-svelte';
+	import { MessageSquare, Sun, Moon, Menu } from 'lucide-svelte';
 	import { get } from 'svelte/store';
 	import { mode, toggleMode } from 'mode-watcher';
 	import { Button } from '$lib/components/ui/button';
+	import * as Sheet from '$lib/components/ui/sheet';
 
 	let scrollAreaViewport = $state<HTMLElement | null>(null);
 
@@ -48,19 +49,36 @@
 </script>
 
 <div class="flex h-screen w-full overflow-hidden bg-background">
-	<aside class="w-64 shrink-0 h-full">
+	<aside class="hidden md:block w-64 shrink-0 h-full">
 		<Sidebar />
 	</aside>
 
 	<main class="flex-1 flex flex-col h-full relative overflow-hidden">
-		<header class="h-14 border-b flex items-center justify-between px-6 bg-background/95 backdrop-blur shrink-0">
-			<h1 class="font-semibold text-sm">
-				{#if $currentSessionId}
-					{$sessions.find(s => s.session_id === $currentSessionId)?.title || 'New Chat'}
-				{:else}
-					Select a chat
-				{/if}
-			</h1>
+		<header class="h-14 border-b flex items-center justify-between px-4 md:px-6 bg-background/95 backdrop-blur shrink-0 gap-4">
+			<div class="flex items-center gap-2 md:gap-0">
+				<div class="md:hidden">
+					<Sheet.Root>
+						<Sheet.Trigger>
+							{#snippet child({ props })}
+								<Button variant="ghost" size="icon" {...props}>
+									<Menu class="h-5 w-5" />
+									<span class="sr-only">Toggle Sidebar</span>
+								</Button>
+							{/snippet}
+						</Sheet.Trigger>
+						<Sheet.Content side="left" class="p-0 w-72">
+							<Sidebar />
+						</Sheet.Content>
+					</Sheet.Root>
+				</div>
+				<h1 class="font-semibold text-sm">
+					{#if $currentSessionId}
+						{$sessions.find(s => s.session_id === $currentSessionId)?.title || 'New Chat'}
+					{:else}
+						Select a chat
+					{/if}
+				</h1>
+			</div>
 
 			<Button variant="ghost" size="icon" onclick={toggleMode}>
 				{#if mode.current === 'dark'}
@@ -92,7 +110,7 @@
 			</div>
 		</div>
 
-		<div class="max-w-4xl w-full mx-auto shrink-0">
+		<div class="max-w-4xl w-full mx-auto shrink-0 px-4">
 			<ChatInput />
 		</div>
 	</main>
