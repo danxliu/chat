@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -16,18 +16,18 @@ class ChatStorage:
     def _get_key(self, session_id: str) -> str:
         return f"agent_context:{session_id}"
 
-    async def save_context(self, session_id: str, state: Dict[str, Any]) -> None:
+    async def save_context(self, session_id: str, state: dict[str, Any]) -> None:
         await self.client.set(self._get_key(session_id), json.dumps(state))
         await self.client.zadd("agent_last_updated", {session_id: time.time()})
 
-    async def load_context(self, session_id: str) -> Optional[Dict[str, Any]]:
+    async def load_context(self, session_id: str) -> dict[str, Any] | None:
         data = await self.client.get(self._get_key(session_id))
         if not data:
             return None
 
         return json.loads(data)
 
-    async def list_sessions(self) -> List[str]:
+    async def list_sessions(self) -> list[str]:
         # Use sorted set for ordering by most recent
         session_ids = await self.client.zrevrange("agent_last_updated", 0, -1)
 
@@ -42,7 +42,7 @@ class ChatStorage:
         await self.client.hset("agent_titles", session_id, title)
         await self.client.zadd("agent_last_updated", {session_id: time.time()})
 
-    async def get_title(self, session_id: str) -> Optional[str]:
+    async def get_title(self, session_id: str) -> str | None:
         return await self.client.hget("agent_titles", session_id)
 
     async def list_sessions_with_titles(self) -> list[dict[str, str]]:

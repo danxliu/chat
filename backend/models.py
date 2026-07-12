@@ -1,5 +1,5 @@
 import logging
-from typing import Any, List, Optional
+from typing import Any
 
 import httpx
 from pydantic import BaseModel, Field
@@ -8,10 +8,10 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-AVAILABLE_MODELS: List[str] = []
+AVAILABLE_MODELS: list[str] = []
 
 
-async def refresh_models() -> List[str]:
+async def refresh_models() -> list[str]:
     """Fetch available models from OpenCode Go. Falls back to hardcoded default."""
     global AVAILABLE_MODELS
     if not settings.api_key or not settings.llm_api_base:
@@ -66,11 +66,11 @@ class Metrics(BaseModel):
 
 class ChatMessage(BaseModel):
     role: str
-    blocks: List[Block] = Field(default_factory=list)
-    thought: Optional[str] = None
-    attachments: Optional[List[Attachment]] = None
-    metrics: Optional[Metrics] = None
+    blocks: list[Block] = Field(default_factory=list)
+    thought: str | None = None
+    attachments: list[Attachment] | None = None
+    metrics: Metrics | None = None
 
 
 class HistoryResponse(BaseModel):
-    history: List[ChatMessage]
+    history: list[ChatMessage]

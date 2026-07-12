@@ -1,6 +1,6 @@
-from typing import List, Dict, Any
+from typing import Any
 
-def draw_chart(chart_type: str, title: str, data: List[Dict[str, Any]], label_key: str, value_keys: List[str]) -> str:
+def draw_chart(chart_type: str, title: str, data: list[dict[str, Any]], label_key: str, value_keys: list[str]) -> str:
     """
     Draw a graph (bar, line, pie, area) with the given data.
     

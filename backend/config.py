@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # LLM API
     llm_api_base: str = ""
     api_key: str = ""
-    model: str = ""
+    model: str = "deepseek-v4-pro"
 
     # Completion defaults
     max_tokens: int = 32768
@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     presence_penalty: float = 0.2
     timeout: float = 600.0
     step_threshold: int = 15
+
+    # Sentiment tool
+    sentiment_model: str = "deepseek-v4-flash"
+    sentiment_max_articles: int = 10
+    sentiment_max_concurrency: int = 3
 
     # Redis
     redis_host: str = "127.0.0.1"

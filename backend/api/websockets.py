@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from enum import Enum
-from typing import Dict, List, Optional
+
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError, model_validator
@@ -37,10 +37,10 @@ class MessageType(str, Enum):
 
 class IncomingPayload(BaseModel):
     type: MessageType
-    session_id: Optional[str] = None
-    content: Optional[str] = None
-    model: Optional[str] = None
-    attachments: Optional[List[dict]] = None
+    session_id: str | None = None
+    content: str | None = None
+    model: str | None = None
+    attachments: list[dict] | None = None
     enable_reasoning: bool = True
 
     @model_validator(mode="after")
@@ -59,8 +59,8 @@ class ConnectionManager:
     def __init__(self, websocket: WebSocket):
         self.ws = websocket
         self._lock = asyncio.Lock()
-        self.tasks: Set[asyncio.Task] = set()
-        self.cancel_events: Dict[str, asyncio.Event] = {}
+        self.tasks: set[asyncio.Task] = set()
+        self.cancel_events: dict[str, asyncio.Event] = {}
 
     async def send(self, payload: dict):
         async with self._lock:

@@ -8,6 +8,27 @@
 
 	let { content = '' } = $props();
 
+	const citationExtension = {
+		name: 'citation',
+		level: 'inline',
+		start(src: string) { return src.match(/\[cite:/)?.index; },
+		tokenizer(src: string) {
+			const rule = /^\[cite:([^\]]+)\]\(([^)]+)\)/;
+			const match = rule.exec(src);
+			if (match) {
+				return {
+					type: 'citation',
+					raw: match[0],
+					text: match[1],
+					href: match[2]
+				};
+			}
+		},
+		renderer(token: any) {
+			return `<a href="${token.href}" target="_blank" rel="noopener noreferrer" class="citation-pill">${token.text}</a>`;
+		}
+	};
+
 	const marked = new Marked(
 		markedKatex({
 			throwOnError: false,
@@ -16,10 +37,11 @@
 		gfmHeadingId(),
 		mangle()
 	);
+	marked.use({ extensions: [citationExtension] });
 
 	const html = $derived.by(() => {
 		const rawHtml = marked.parse(content) as string;
-		return DOMPurify.sanitize(rawHtml);
+		return DOMPurify.sanitize(rawHtml, { ADD_ATTR: ['target'] });
 	});
 </script>
 
@@ -105,5 +127,22 @@
 		font-style: italic;
 		margin-top: 1rem;
 		margin-bottom: 1rem;
+	}
+	:global(.markdown-body .citation-pill) {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.125rem 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: hsl(var(--primary-foreground));
+		background-color: hsl(var(--primary) / 0.8);
+		border-radius: 9999px;
+		text-decoration: none;
+		margin-left: 0.25rem;
+		transition: background-color 0.2s;
+		vertical-align: middle;
+	}
+	:global(.markdown-body .citation-pill:hover) {
+		background-color: hsl(var(--primary));
 	}
 </style>

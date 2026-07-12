@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Callable, Dict, List, Type
+from typing import Any, Callable, Type
 
 from pydantic import create_model
 from pydantic.main import BaseModel
@@ -8,25 +8,33 @@ from config import settings
 from tools.draw_chart import draw_chart
 from tools.execute_python import execute_python
 from tools.finance import get_stock_data, get_stock_history
+from tools.fundamental_analysis import run_fundamental_analysis
+from tools.momentum_analysis import run_momentum_analysis
+from tools.sentiment_analysis import run_sentiment_analysis
 from tools.suggest_continuations import suggest_continuations
+from tools.volatility_analysis import run_volatility_analysis
 from tools.web_scrape import web_scrape
 from tools.web_search import web_search
 
 
-def get_tools() -> List[Callable]:
+def get_tools() -> list[Callable]:
     """Returns the list of tool functions available to the agent."""
     return [
         web_search,
         web_scrape,
         get_stock_data,
         get_stock_history,
+        run_fundamental_analysis,
+        run_momentum_analysis,
+        run_volatility_analysis,
+        run_sentiment_analysis,
         execute_python,
         draw_chart,
         suggest_continuations,
     ]
 
 
-def _get_tool_models() -> Dict[str, Type[BaseModel]]:
+def _get_tool_models() -> dict[str, Type[BaseModel]]:
     """Generates Pydantic models for each tool's parameters."""
     models = {}
     for func in get_tools():
@@ -46,7 +54,7 @@ def _get_tool_models() -> Dict[str, Type[BaseModel]]:
 TOOL_MODELS = _get_tool_models()
 
 
-def get_tools_schema() -> List[Dict[str, Any]]:
+def get_tools_schema() -> list[dict[str, Any]]:
     """Generates OpenAI-compatible tool schemas using Pydantic models."""
     tools = []
     tool_funcs = {func.__name__: func for func in get_tools()}
@@ -67,7 +75,7 @@ def get_tools_schema() -> List[Dict[str, Any]]:
     return tools
 
 
-def execute_tool(name: str, kwargs: Dict[str, Any]) -> str:
+async def execute_tool(name: str, kwargs: dict[str, Any]) -> str:
     """Validates and executes a tool by name with the given arguments."""
     tool_map = {func.__name__: func for func in get_tools()}
     if name not in tool_map:
@@ -80,12 +88,17 @@ def execute_tool(name: str, kwargs: Dict[str, Any]) -> str:
             return f"Error: Validation failed for tool '{name}': {e}"
 
     try:
-        return str(tool_map[name](**kwargs))
+        func = tool_map[name]
+        if inspect.iscoroutinefunction(func):
+            result = await func(**kwargs)
+        else:
+            result = func(**kwargs)
+        return str(result)
     except Exception as e:
         return f"Error executing tool '{name}': {e}"
 
 
-def get_completion_args(model: str) -> Dict[str, Any]:
+def get_completion_args(model: str) -> dict[str, Any]:
     """Returns the default arguments for LiteLLM completion."""
     return {
         "model": f"openai/{model}",

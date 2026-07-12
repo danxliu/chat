@@ -1,7 +1,5 @@
-from typing import List
 
-
-def suggest_continuations(continuations: List[str]) -> str:
+def suggest_continuations(continuations: list[str]) -> str:
     """Suggests a list of prompt continuations to the user.
     These will be rendered as clickable buttons at the bottom of the chat message.
     

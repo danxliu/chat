@@ -3,7 +3,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator
 
 import litellm
 from pydantic import BaseModel
@@ -35,7 +35,7 @@ class ToolCallFunction(BaseModel):
 
 
 class ToolCall(BaseModel):
-    id: Optional[str] = None
+    id: str | None = None
     type: str = "function"
     function: ToolCallFunction
 
@@ -59,10 +59,10 @@ class WarningEvent(BaseModel):
 
 class FinalResponseEvent(BaseModel):
     content: str
-    metrics: Optional[Dict[str, Any]] = None
+    metrics: dict[str, Any] | None = None
 
 
-def build_rich_block(tool_name: str, args: dict, index: int) -> Optional[Block]:
+def build_rich_block(tool_name: str, args: dict, index: int) -> Block | None:
     if tool_name == "draw_chart":
         return Block(index=index, type="chart", content=args)
     if tool_name == "suggest_continuations":
@@ -73,7 +73,7 @@ def build_rich_block(tool_name: str, args: dict, index: int) -> Optional[Block]:
 class AgentExecutor:
     def __init__(self, session_id: str):
         self.session_id = session_id
-        self.state: Dict[str, Any] = {}
+        self.state: dict[str, Any] = {}
 
     async def _load_state(self):
         state = await chat_storage.load_context(self.session_id)
@@ -88,58 +88,65 @@ class AgentExecutor:
     async def _save_state(self):
         await chat_storage.save_context(self.session_id, self.state)
 
+    def _process_attachments(self, attachments: list[dict] | None) -> tuple[list[dict], str]:
+        processed_attachments = []
+        extra_content = ""
+
+        if not attachments:
+            return processed_attachments, extra_content
+
+        for att in attachments:
+            filename = att.get("filename")
+            mime_type = att.get("mime_type", "")
+            stored_filename = att.get("stored_filename")
+
+            if not stored_filename:
+                continue
+
+            file_path = settings.UPLOADS_DIR / stored_filename
+            if not file_path.exists():
+                continue
+
+            if mime_type.startswith("image/"):
+                base64_data = base64.b64encode(file_path.read_bytes()).decode()
+                processed_attachments.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_data}"
+                        },
+                    }
+                )
+            elif mime_type == "application/pdf":
+                try:
+                    reader = PdfReader(file_path)
+                    text = "".join(
+                        page.extract_text() + "\n" for page in reader.pages
+                    )
+                    extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
+                except Exception as e:
+                    logger.error(f"Error reading PDF {filename}: {e}")
+                    extra_content += f"\n\nError reading PDF {filename}: {e}\n"
+            else:
+                try:
+                    text = file_path.read_text(encoding="utf-8")
+                    extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
+                except Exception as e:
+                    logger.error(f"Error reading text file {filename}: {e}")
+                    extra_content += f"\n\nError reading file {filename}: {e}\n"
+
+        return processed_attachments, extra_content
+
     async def run(
         self,
         query: str,
         model_name: str,
-        attachments: Optional[List[dict]] = None,
+        attachments: list[dict] | None = None,
         enable_reasoning: bool = True,
     ) -> AsyncGenerator[Any, None]:
         await self._load_state()
 
-        processed_attachments = []
-        extra_content = ""
-
-        if attachments:
-            for att in attachments:
-                filename = att.get("filename")
-                mime_type = att.get("mime_type", "")
-                stored_filename = att.get("stored_filename")
-
-                if not stored_filename:
-                    continue
-
-                file_path = settings.UPLOADS_DIR / stored_filename
-                if not file_path.exists():
-                    continue
-
-                if mime_type.startswith("image/"):
-                    base64_data = base64.b64encode(file_path.read_bytes()).decode()
-                    processed_attachments.append(
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{mime_type};base64,{base64_data}"
-                            },
-                        }
-                    )
-                elif mime_type == "application/pdf":
-                    try:
-                        reader = PdfReader(file_path)
-                        text = "".join(
-                            page.extract_text() + "\n" for page in reader.pages
-                        )
-                        extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
-                    except Exception as e:
-                        logger.error(f"Error reading PDF {filename}: {e}")
-                        extra_content += f"\n\nError reading PDF {filename}: {e}\n"
-                else:
-                    try:
-                        text = file_path.read_text(encoding="utf-8")
-                        extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
-                    except Exception as e:
-                        logger.error(f"Error reading text file {filename}: {e}")
-                        extra_content += f"\n\nError reading file {filename}: {e}\n"
+        processed_attachments, extra_content = self._process_attachments(attachments)
 
         full_query = query + extra_content
         self.state["chat_history"].append(
@@ -193,7 +200,7 @@ class AgentExecutor:
                 )
 
                 current_content, current_thought = "", ""
-                tool_calls: List[ToolCall] = []
+                tool_calls: list[ToolCall] = []
 
                 try:
                     async for chunk in response:
@@ -279,7 +286,7 @@ class AgentExecutor:
                         else:
                             yield ToolCallEvent(tool_name=name, tool_kwargs=args)
 
-                        result = execute_tool(name, args)
+                        result = await execute_tool(name, args)
                         self.state["chat_history"].append(
                             {
                                 "role": "tool",
@@ -316,9 +323,9 @@ class AgentExecutor:
         finally:
             await self._save_state()
 
-    async def get_history(self) -> List[ChatMessage]:
+    async def get_history(self) -> list[ChatMessage]:
         await self._load_state()
-        history: List[ChatMessage] = []
+        history: list[ChatMessage] = []
 
         for msg in self.state.get("chat_history", []):
             role = msg.get("role")

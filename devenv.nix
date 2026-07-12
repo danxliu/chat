@@ -22,4 +22,7 @@
   packages = [ pkgs.git ];
 
   services.redis.enable = true;
+
+  processes.backend.exec = "cd backend && uv run main.py";
+  processes.frontend.exec = "cd frontend && bun run dev";
 }
