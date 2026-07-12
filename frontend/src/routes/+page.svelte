@@ -91,10 +91,10 @@
 		</header>
 
 		<div 
-			class="flex-1 overflow-y-auto min-h-0 p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" 
+			class="flex-1 overflow-y-auto min-h-0 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" 
 			bind:this={scrollAreaViewport}
 		>
-			<div class="max-w-4xl mx-auto flex flex-col min-h-full">
+			<div class="max-w-4xl w-full mx-auto px-4 flex flex-col gap-6 min-h-full pb-4">
 				{#each $messages as message}
 					<ChatMessage {message} />
 				{/each}

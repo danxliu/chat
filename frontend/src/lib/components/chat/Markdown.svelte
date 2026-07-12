@@ -45,58 +45,42 @@
 	});
 </script>
 
-<div class="markdown-body max-w-none">
+<div class="markdown-body max-w-none flex flex-col gap-4">
 	{@html html}
 </div>
 
 <style>
 	:global(.markdown-body pre) {
-		background-color: hsl(var(--muted));
+		background-color: var(--muted);
 		padding: 1rem;
 		border-radius: 0.5rem;
 		overflow-x: auto;
-		margin-top: 1rem;
-		margin-bottom: 1rem;
 	}
 	:global(.markdown-body code) {
-		background-color: hsl(var(--muted));
+		background-color: var(--muted);
 		padding: 0.125rem 0.25rem;
 		border-radius: 0.25rem;
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 		font-size: 0.875rem;
 	}
-	:global(.markdown-body p) {
-		margin-bottom: 1rem;
-	}
-	:global(.markdown-body p:last-child) {
-		margin-bottom: 0;
-	}
 	:global(.markdown-body h1) {
 		font-size: 1.5rem;
 		font-weight: 700;
-		margin-top: 1.5rem;
-		margin-bottom: 1rem;
 	}
 	:global(.markdown-body h2) {
 		font-size: 1.25rem;
 		font-weight: 600;
-		margin-top: 1.25rem;
-		margin-bottom: 0.75rem;
 	}
 	:global(.markdown-body h3) {
 		font-size: 1.125rem;
 		font-weight: 600;
-		margin-top: 1rem;
-		margin-bottom: 0.5rem;
 	}
 	:global(.markdown-body ul) {
 		list-style-type: disc;
-		margin-bottom: 1rem;
 		padding-left: 1.5rem;
 	}
 	:global(.markdown-body ol) {
 		list-style-type: decimal;
-		margin-bottom: 1rem;
 		padding-left: 1.5rem;
 	}
 	:global(.markdown-body li) {
@@ -105,28 +89,33 @@
 	:global(.markdown-body table) {
 		width: 100%;
 		border-collapse: collapse;
-		margin-top: 1rem;
-		margin-bottom: 1rem;
 	}
 	:global(.markdown-body th), :global(.markdown-body td) {
-		border: 1px solid hsl(var(--border));
+		border: 1px solid var(--border);
 		padding: 0.5rem;
 		text-align: left;
 	}
 	:global(.markdown-body th) {
-		background-color: hsl(var(--muted));
+		background-color: var(--muted);
 		font-weight: 600;
 	}
 	:global(.markdown-body tr:nth-child(even)) {
-		background-color: hsl(var(--muted) / 0.5);
+		background-color: color-mix(in srgb, var(--muted) 50%, transparent);
 	}
 	:global(.markdown-body blockquote) {
 		border-left-width: 4px;
-		border-left-color: hsl(var(--primary));
+		border-left-color: var(--primary);
 		padding-left: 1rem;
 		font-style: italic;
-		margin-top: 1rem;
-		margin-bottom: 1rem;
+	}
+	:global(.markdown-body hr) {
+		border: 0;
+		border-top: 1px solid var(--border);
+	}
+	:global(.markdown-body a:not(.citation-pill)) {
+		color: var(--primary);
+		text-decoration: underline;
+		text-underline-offset: 4px;
 	}
 	:global(.markdown-body .citation-pill) {
 		display: inline-flex;
@@ -134,15 +123,15 @@
 		padding: 0.125rem 0.5rem;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: hsl(var(--primary-foreground));
-		background-color: hsl(var(--primary) / 0.8);
+		color: var(--secondary-foreground);
+		background-color: var(--secondary);
 		border-radius: 9999px;
 		text-decoration: none;
 		margin-left: 0.25rem;
-		transition: background-color 0.2s;
+		transition: opacity 0.2s;
 		vertical-align: middle;
 	}
 	:global(.markdown-body .citation-pill:hover) {
-		background-color: hsl(var(--primary));
+		opacity: 0.8;
 	}
 </style>

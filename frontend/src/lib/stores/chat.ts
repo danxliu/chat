@@ -286,12 +286,14 @@ function handleSocketMessage(payload: any) {
 
 export async function refreshSessions() {
   const res = await fetch("/api/chats");
+  if (!res.ok) throw new Error(`Failed to refresh sessions: ${res.statusText}`);
   const data = await res.json();
   sessions.set(data.sessions);
 }
 
 export async function loadHistory(sessionId: string) {
   const res = await fetch(`/api/chats/${sessionId}/history`);
+  if (!res.ok) throw new Error(`Failed to load history: ${res.statusText}`);
   const data = await res.json();
 
   const history: Message[] = [];
@@ -314,6 +316,7 @@ export async function switchSession(sessionId: string) {
 
 export async function createNewSession() {
   const res = await fetch("/api/chats", { method: "POST" });
+  if (!res.ok) throw new Error(`Failed to create session: ${res.statusText}`);
   const data = await res.json();
   await refreshSessions();
   await switchSession(data.session_id);
@@ -321,7 +324,8 @@ export async function createNewSession() {
 }
 
 export async function deleteSession(sessionId: string) {
-  await fetch(`/api/chats/${sessionId}`, { method: "DELETE" });
+  const res = await fetch(`/api/chats/${sessionId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Failed to delete session: ${res.statusText}`);
   const current = get(currentSessionId);
   if (current === sessionId) {
     currentSessionId.set(null);
@@ -339,6 +343,7 @@ export async function deleteSession(sessionId: string) {
 
 export async function loadModels() {
   const res = await fetch("/api/chats/models");
+  if (!res.ok) throw new Error(`Failed to load models: ${res.statusText}`);
   const data = await res.json();
   models.set(data.models);
   
