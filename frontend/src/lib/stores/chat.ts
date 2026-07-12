@@ -57,7 +57,18 @@ export const currentSessionId = writable<string | null>(null);
 export const isGenerating = writable(false);
 export const isConnected = writable(false);
 export const models = writable<string[]>([]);
-export const selectedModel = writable<string>("");
+
+const initialModel = typeof window !== "undefined" ? window.localStorage.getItem("selectedModel") || "" : "";
+export const selectedModel = writable<string>(initialModel);
+
+if (typeof window !== "undefined") {
+  selectedModel.subscribe((val) => {
+    if (val) {
+      window.localStorage.setItem("selectedModel", val);
+    }
+  });
+}
+
 export const activeModel = selectedModel;
 export const enableReasoning = writable(true);
 
@@ -330,8 +341,12 @@ export async function loadModels() {
   const res = await fetch("/api/chats/models");
   const data = await res.json();
   models.set(data.models);
-  if (data.models.length > 0 && !get(selectedModel)) {
-    selectedModel.set(data.models[0]);
+  
+  const currentModel = get(selectedModel);
+  if (data.models.length > 0) {
+    if (!currentModel || !data.models.includes(currentModel)) {
+      selectedModel.set(data.models[0]);
+    }
   }
 }
 
