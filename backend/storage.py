@@ -58,6 +58,35 @@ class ChatStorage:
         await self.client.hdel("agent_titles", session_id)
         await self.client.zrem("agent_last_updated", session_id)
 
+    async def add_memory(self, user_id: str, content: str, embedding_b64: str) -> str:
+        """Add a memory with its embedding for a user."""
+        import uuid
+
+        memory_id = str(uuid.uuid4())
+        memory = json.dumps(
+            {
+                "id": memory_id,
+                "content": content,
+                "embedding": embedding_b64,
+                "created_at": time.time(),
+            }
+        )
+        key = f"user_memories:{user_id}"
+        await self.client.lpush(key, memory)
+        await self.client.ltrim(key, 0, settings.memory_max_count - 1)
+        return memory_id
+
+    async def get_memories(self, user_id: str) -> list[dict[str, Any]]:
+        """Retrieve all memories for a user (ordered newest first)."""
+        key = f"user_memories:{user_id}"
+        data = await self.client.lrange(key, 0, -1)
+        return [json.loads(d) for d in data]
+
+    async def delete_memories(self, user_id: str) -> None:
+        """Delete all memories for a user."""
+        key = f"user_memories:{user_id}"
+        await self.client.delete(key)
+
     async def clear_all(self) -> None:
         keys = await self.client.keys("agent_context:*")
         if keys:

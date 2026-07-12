@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import logging
@@ -11,6 +12,7 @@ from pypdf import PdfReader
 
 from agent import execute_tool, get_completion_args, get_tools_schema
 from config import settings
+from memory import MemoryManager
 from models import Attachment, Block, ChatMessage, Metrics
 from prompts import (
     STARTING_PROMPT_TEMPLATE,
@@ -71,8 +73,10 @@ def build_rich_block(tool_name: str, args: dict, index: int) -> Block | None:
 
 
 class AgentExecutor:
-    def __init__(self, session_id: str):
+    def __init__(self, session_id: str, user_id: str | None = None):
         self.session_id = session_id
+        self.user_id = user_id or MemoryManager.DEFAULT_USER_ID
+        self.memory = MemoryManager(user_id=self.user_id)
         self.state: dict[str, Any] = {}
 
     async def _load_state(self):
@@ -88,7 +92,9 @@ class AgentExecutor:
     async def _save_state(self):
         await chat_storage.save_context(self.session_id, self.state)
 
-    def _process_attachments(self, attachments: list[dict] | None) -> tuple[list[dict], str]:
+    def _process_attachments(
+        self, attachments: list[dict] | None
+    ) -> tuple[list[dict], str]:
         processed_attachments = []
         extra_content = ""
 
@@ -112,17 +118,13 @@ class AgentExecutor:
                 processed_attachments.append(
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{base64_data}"
-                        },
+                        "image_url": {"url": f"data:{mime_type};base64,{base64_data}"},
                     }
                 )
             elif mime_type == "application/pdf":
                 try:
                     reader = PdfReader(file_path)
-                    text = "".join(
-                        page.extract_text() + "\n" for page in reader.pages
-                    )
+                    text = "".join(page.extract_text() + "\n" for page in reader.pages)
                     extra_content += f"\n\n--- Content of {filename} ---\n{text}\n"
                 except Exception as e:
                     logger.error(f"Error reading PDF {filename}: {e}")
@@ -154,9 +156,13 @@ class AgentExecutor:
         )
         await self._save_state()
 
+        # Retrieve relevant cross-session memories
+        memory_context = await self.memory.retrieve(full_query)
+
         formatted_query_text = STARTING_PROMPT_TEMPLATE.format(
             query=full_query,
             current_date=datetime.now().strftime("%A, %B %d, %Y"),
+            memory_context=memory_context or "(No prior memories yet.)",
         )
 
         # Build multi-modal message if there are images
@@ -313,6 +319,11 @@ class AgentExecutor:
                     self.state["chat_history"].append(assistant_msg)
                     should_stop = True
                     await self._save_state()
+
+                    # Fire-and-forget: extract memories from this exchange
+                    asyncio.create_task(
+                        self.memory.extract_and_store(query, final_content)
+                    )
 
                     yield FinalResponseEvent(content=final_content, metrics=metrics)
                     return

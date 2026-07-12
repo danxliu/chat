@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     sentiment_max_articles: int = 10
     sentiment_max_concurrency: int = 3
 
+    # Memory (cross-session persistent memory)
+    embedding_model: str = "intfloat/multilingual-e5-large"
+    memory_top_k: int = 5
+    memory_max_count: int = 1000
+    memory_extraction_model: str = "deepseek-v4-flash"
+
     # Redis
     redis_host: str = "127.0.0.1"
     redis_port: int = 6379

@@ -8,6 +8,9 @@ You are an autonomous, helpful AI assistant operating in a web chat environment.
 # ENVIRONMENT
 - Current Date/Time: {current_date}
 
+# USER MEMORY
+{memory_context}
+
 Please address the following user request:
 
 <user_request>
