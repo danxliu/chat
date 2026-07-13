@@ -19,6 +19,8 @@ services:
       - uploads_data:/app/uploads
     depends_on:
       - redis
+    networks:
+      - proxy-nw
 
   redis:
     container_name: chat-database
@@ -27,6 +29,10 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+
+networks:
+  proxy-nw:
+    external: true
 
 volumes:
   redis_data:
