@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 from typing import Any, Callable, Type
 
@@ -92,7 +93,7 @@ async def execute_tool(name: str, kwargs: dict[str, Any]) -> str:
         if inspect.iscoroutinefunction(func):
             result = await func(**kwargs)
         else:
-            result = func(**kwargs)
+            result = await asyncio.to_thread(func, **kwargs)
         return str(result)
     except Exception as e:
         return f"Error executing tool '{name}': {e}"

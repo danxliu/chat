@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Pydantic model for validating LLM sentiment output
 
+
 class SentimentResult(BaseModel):
     score: float = Field(ge=-1.0, le=1.0)
     label: Literal["bullish", "bearish", "neutral"]
@@ -97,6 +98,7 @@ def _build_user_prompt(article: dict) -> str:
 
 # Article fetching (yfinance)
 
+
 def _fetch_articles(tickers: list[str]) -> list[dict]:
     """Fetch recent news articles for a list of tickers via yfinance."""
     articles: list[dict] = []
@@ -153,6 +155,7 @@ def _fetch_articles(tickers: list[str]) -> list[dict]:
 
 # LLM sentiment classification
 
+
 async def _analyze_one_article(article: dict) -> dict:
     """Classify sentiment of a single article via litellm. Returns a dict with
     score, label, confidence, reasoning, and tickers."""
@@ -201,6 +204,7 @@ async def _analyze_one_article(article: dict) -> dict:
 
 
 # Output formatting
+
 
 def _format_articles(articles: list[dict]) -> str:
     """Format annotated articles as citable markdown blocks with per-article scores."""
@@ -270,6 +274,7 @@ def _format_articles(articles: list[dict]) -> str:
 
 # Public tool function
 
+
 async def run_sentiment_analysis(tickers: list[str]) -> str:
     """Analyze news sentiment for a list of stock tickers. Fetches recent articles, classifies each as bullish/bearish/neutral via LLM, and returns per-article results with linked titles for citation and numerical sentiment scores."""
     if not tickers:
@@ -277,8 +282,8 @@ async def run_sentiment_analysis(tickers: list[str]) -> str:
 
     tickers = [t.upper().strip() for t in tickers]
 
-    # Phase 1: fetch articles (sync yfinance calls)
-    articles = _fetch_articles(tickers)
+    # Phase 1: fetch articles (sync yfinance calls offloaded to thread)
+    articles = await asyncio.to_thread(_fetch_articles, tickers)
 
     if not articles:
         return "No recent news articles found for the requested tickers."
