@@ -6,22 +6,50 @@
         createNewSession,
         deleteSession,
         isConnected,
+        disconnectWebSocket,
+        connectWebSocket,
+        refreshSessions,
+        loadModels,
     } from "$lib/stores/chat";
+    import { userUUID } from "$lib/stores/user";
     import { Button } from "$lib/components/ui/button";
-    import { Separator } from "$lib/components/ui/separator";
     import { ScrollArea } from "$lib/components/ui/scroll-area";
-    import { Plus, MessageSquare, Trash2, Trash } from "lucide-svelte";
+    import UserSettings from "$lib/components/UserSettings.svelte";
+    import { Plus, MessageSquare, Trash2, Trash, User } from "lucide-svelte";
     import { cn } from "$lib/utils";
+    import { get } from "svelte/store";
+
+    let settingsOpen = $state(false);
 
     async function handleClearAllChats() {
         if (!confirm("Are you sure you want to delete all chats?")) return;
-        await fetch("/api/chats", { method: "DELETE" });
+        await fetch("/api/chats", {
+            method: "DELETE",
+            headers: { "X-User-ID": get(userUUID) },
+        });
         await createNewSession();
     }
 
     async function handleClearMemories() {
         if (!confirm("Are you sure you want to clear all memories?")) return;
-        await fetch("/api/chats/memories", { method: "DELETE" });
+        await fetch("/api/chats/memories", {
+            method: "DELETE",
+            headers: { "X-User-ID": get(userUUID) },
+        });
+    }
+
+    async function handleUserImported() {
+        disconnectWebSocket();
+        connectWebSocket();
+        await refreshSessions();
+        await loadModels();
+
+        const s = get(sessions);
+        if (s.length > 0) {
+            await switchSession(s[0].session_id);
+        } else {
+            await createNewSession();
+        }
     }
 </script>
 
@@ -83,6 +111,15 @@
             variant="ghost"
             size="sm"
             class="w-full justify-start gap-2 text-muted-foreground"
+            onclick={() => (settingsOpen = true)}
+        >
+            <User class="h-4 w-4" />
+            User Settings
+        </Button>
+        <Button
+            variant="ghost"
+            size="sm"
+            class="w-full justify-start gap-2 text-muted-foreground"
             onclick={handleClearMemories}
         >
             <Trash class="h-4 w-4" />
@@ -99,3 +136,5 @@
         </Button>
     </div>
 </div>
+
+<UserSettings bind:open={settingsOpen} onImported={handleUserImported} />

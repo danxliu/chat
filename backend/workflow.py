@@ -80,7 +80,7 @@ class AgentExecutor:
         self.state: dict[str, Any] = {}
 
     async def _load_state(self):
-        state = await chat_storage.load_context(self.session_id)
+        state = await chat_storage.load_context(self.user_id, self.session_id)
         if state:
             self.state = state
         else:
@@ -90,7 +90,7 @@ class AgentExecutor:
             }
 
     async def _save_state(self):
-        await chat_storage.save_context(self.session_id, self.state)
+        await chat_storage.save_context(self.user_id, self.session_id, self.state)
 
     def _process_attachments(
         self, attachments: list[dict] | None

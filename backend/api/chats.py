@@ -2,7 +2,7 @@ import shutil
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 
 from config import settings
 from memory import MemoryManager
@@ -15,11 +15,16 @@ router = APIRouter(prefix="/api/chats")
 UPLOAD_DIR = settings.UPLOADS_DIR
 UPLOAD_DIR.mkdir(exist_ok=True)
 
+DEFAULT_USER_ID = "default"
+
 
 @router.post("")
-async def create_chat():
+async def create_chat(
+    user_id: str = Header(default=DEFAULT_USER_ID, alias="X-User-ID"),
+):
     session_id = str(uuid.uuid4())
     await chat_storage.save_context(
+        user_id,
         session_id,
         {
             "chat_history": [],
@@ -30,8 +35,8 @@ async def create_chat():
 
 
 @router.get("")
-async def list_chats():
-    sessions = await chat_storage.list_sessions_with_titles()
+async def list_chats(user_id: str = Header(default=DEFAULT_USER_ID, alias="X-User-ID")):
+    sessions = await chat_storage.list_sessions_with_titles(user_id)
     return {"sessions": sessions}
 
 
@@ -69,25 +74,35 @@ async def get_backend_config():
 
 
 @router.get("/{session_id}/history", response_model=HistoryResponse)
-async def get_chat_history(session_id: str):
-    executor = AgentExecutor(session_id)
+async def get_chat_history(
+    session_id: str,
+    user_id: str = Header(default=DEFAULT_USER_ID, alias="X-User-ID"),
+):
+    executor = AgentExecutor(session_id, user_id=user_id)
     history = await executor.get_history()
     return {"history": history}
 
 
 @router.delete("/memories")
-async def clear_memories():
-    await MemoryManager().clear()
+async def clear_memories(
+    user_id: str = Header(default=DEFAULT_USER_ID, alias="X-User-ID"),
+):
+    await MemoryManager(user_id=user_id).clear()
     return {"status": "success"}
 
 
 @router.delete("/{session_id}")
-async def delete_chat(session_id: str):
-    await chat_storage.delete_context(session_id)
+async def delete_chat(
+    session_id: str,
+    user_id: str = Header(default=DEFAULT_USER_ID, alias="X-User-ID"),
+):
+    await chat_storage.delete_context(user_id, session_id)
     return {"status": "success"}
 
 
 @router.delete("")
-async def clear_all_chats():
-    await chat_storage.clear_all()
+async def clear_all_chats(
+    user_id: str = Header(default=DEFAULT_USER_ID, alias="X-User-ID"),
+):
+    await chat_storage.clear_all(user_id)
     return {"status": "success"}

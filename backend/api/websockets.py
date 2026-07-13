@@ -2,7 +2,6 @@ import asyncio
 import logging
 from enum import Enum
 
-
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError, model_validator
 
@@ -20,6 +19,8 @@ from workflow import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+DEFAULT_USER_ID = "default"
 
 
 class MessageType(str, Enum):
@@ -42,6 +43,7 @@ class IncomingPayload(BaseModel):
     model: str | None = None
     attachments: list[dict] | None = None
     enable_reasoning: bool = True
+    user_id: str = DEFAULT_USER_ID
 
     @model_validator(mode="after")
     def validate_payload(self) -> "IncomingPayload":
@@ -102,15 +104,17 @@ class ConnectionManager:
 
 
 async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
+    user_id = payload.user_id
+
     # Generate title from first message if one doesn't exist yet
-    existing_title = await chat_storage.get_title(payload.session_id)
+    existing_title = await chat_storage.get_title(user_id, payload.session_id)
     if existing_title in (None, "New Chat"):
         new_title = (
             (payload.content[:50] + "...")
             if len(payload.content) > 50
             else payload.content
         )
-        await chat_storage.save_title(payload.session_id, new_title)
+        await chat_storage.save_title(user_id, payload.session_id, new_title)
         await conn.send(
             {
                 "type": MessageType.TITLE_UPDATE.value,
@@ -123,7 +127,7 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
     cancel_event.clear()
 
     try:
-        executor = AgentExecutor(payload.session_id)
+        executor = AgentExecutor(payload.session_id, user_id=user_id)
         final_response = ""
         metrics = None
 
@@ -199,6 +203,7 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
 
 @router.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
+    user_id = websocket.query_params.get("user_id", DEFAULT_USER_ID)
     await websocket.accept()
     conn = ConnectionManager(websocket)
 
@@ -208,6 +213,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
             try:
                 payload = IncomingPayload(**raw_data)
+                # Override user_id from query param (connection-level) if
+                # not explicitly set in the message payload
+                if not payload.user_id or payload.user_id == DEFAULT_USER_ID:
+                    payload.user_id = user_id
             except ValidationError as e:
                 await conn.send_error(f"Invalid payload: {e.errors()[0]['msg']}")
                 continue

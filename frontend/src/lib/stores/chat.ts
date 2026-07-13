@@ -1,5 +1,6 @@
 import { writable, get, derived } from "svelte/store";
 import { toast } from "svelte-sonner";
+import { userUUID } from "$lib/stores/user";
 
 export const MessageType = {
   MESSAGE: "message",
@@ -107,8 +108,9 @@ export function connectWebSocket() {
   )
     return;
 
+  const uid = get(userUUID);
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
+  const wsUrl = `${protocol}//${window.location.host}/ws/chat?user_id=${uid}`;
   socket = new WebSocket(wsUrl);
 
   socket.onopen = () => {
@@ -322,15 +324,21 @@ function handleSocketMessage(payload: any) {
   }
 }
 
+function authHeaders(): Record<string, string> {
+  return { "X-User-ID": get(userUUID) };
+}
+
 export async function refreshSessions() {
-  const res = await fetch("/api/chats");
+  const res = await fetch("/api/chats", { headers: authHeaders() });
   if (!res.ok) throw new Error(`Failed to refresh sessions: ${res.statusText}`);
   const data = await res.json();
   sessions.set(data.sessions);
 }
 
 export async function loadHistory(sessionId: string) {
-  const res = await fetch(`/api/chats/${sessionId}/history`);
+  const res = await fetch(`/api/chats/${sessionId}/history`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error(`Failed to load history: ${res.statusText}`);
   const data = await res.json();
 
@@ -358,7 +366,10 @@ export async function switchSession(sessionId: string) {
 }
 
 export async function createNewSession() {
-  const res = await fetch("/api/chats", { method: "POST" });
+  const res = await fetch("/api/chats", {
+    method: "POST",
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error(`Failed to create session: ${res.statusText}`);
   const data = await res.json();
   await refreshSessions();
@@ -367,7 +378,10 @@ export async function createNewSession() {
 }
 
 export async function deleteSession(sessionId: string) {
-  const res = await fetch(`/api/chats/${sessionId}`, { method: "DELETE" });
+  const res = await fetch(`/api/chats/${sessionId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error(`Failed to delete session: ${res.statusText}`);
 
   // Remove from per-session caches
@@ -398,7 +412,7 @@ export async function deleteSession(sessionId: string) {
 }
 
 export async function loadModels() {
-  const res = await fetch("/api/chats/models");
+  const res = await fetch("/api/chats/models", { headers: authHeaders() });
   if (!res.ok) throw new Error(`Failed to load models: ${res.statusText}`);
   const data = await res.json();
   models.set(data.models);
@@ -432,6 +446,7 @@ export function sendMessage(content: string, attachments: Attachment[] = []) {
     JSON.stringify({
       type: MessageType.MESSAGE,
       session_id: sid,
+      user_id: get(userUUID),
       content,
       model,
       attachments,
@@ -448,7 +463,18 @@ export function cancelGeneration() {
     JSON.stringify({
       type: MessageType.CANCEL,
       session_id: sid,
+      user_id: get(userUUID),
     }),
   );
   generatingSessions.update((map) => ({ ...map, [sid]: false }));
+}
+
+export function disconnectWebSocket() {
+  stopPing();
+  if (socket) {
+    socket.onclose = null; // Prevent auto-reconnect
+    socket.close();
+    socket = null;
+  }
+  isConnected.set(false);
 }
