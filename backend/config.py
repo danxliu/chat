@@ -34,8 +34,12 @@ class Settings(BaseSettings):
     sentiment_max_articles: int = 10
     sentiment_max_concurrency: int = 3
 
+    # HuggingFace
+    hf_token: str = ""
+
     # Memory (cross-session persistent memory)
     embedding_model: str = "intfloat/multilingual-e5-large"
+    embedding_cache_dir: str = ""
     memory_top_k: int = 5
     memory_max_count: int = 1000
     memory_extraction_model: str = "deepseek-v4-flash"

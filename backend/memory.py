@@ -1,16 +1,17 @@
 import base64
 import json
 import logging
+import os
 from typing import Any
 
 import litellm
 import numpy as np
 from fastembed import TextEmbedding
-from prompts.fact_extraction import FACT_EXTRACTION_PROMPT
 from pydantic import BaseModel, Field
 
 from agent import get_completion_args
 from config import settings
+from prompts.fact_extraction import FACT_EXTRACTION_PROMPT
 from storage import chat_storage
 
 logger = logging.getLogger(__name__)
@@ -30,9 +31,14 @@ class MemoryManager:
     @property
     def embedder(self) -> TextEmbedding:
         if self._embedder is None:
+            if settings.hf_token and "HF_TOKEN" not in os.environ:
+                os.environ["HF_TOKEN"] = settings.hf_token
             logger.info("Loading embedding model %s...", settings.embedding_model)
+            kwargs = {}
+            if settings.embedding_cache_dir:
+                kwargs["cache_dir"] = settings.embedding_cache_dir
             self._embedder = TextEmbedding(
-                model_name=settings.embedding_model, threads=2
+                model_name=settings.embedding_model, threads=2, **kwargs
             )
             logger.info("Embedding model loaded.")
         return self._embedder

@@ -19,7 +19,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.13-slim-bookworm
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/backend/.venv/bin:$PATH"
-RUN useradd -m -d /app -s /bin/bash appuser
+RUN useradd -m -d /app -s /bin/bash appuser && \
+    mkdir -p /app/embedding_cache && \
+    chown appuser:appuser /app/embedding_cache
 WORKDIR /app
 COPY --from=backend-builder --chown=appuser:appuser /app/backend/.venv /app/backend/.venv
 COPY --chown=appuser:appuser backend/ /app/backend/

@@ -15,8 +15,11 @@ services:
       - FREQUENCY_PENALTY
       - PRESENCE_PENALTY
       - STEP_THRESHOLD
+      - EMBEDDING_CACHE_DIR=/app/embedding_cache
+      - HF_TOKEN
     volumes:
       - uploads_data:/app/uploads
+      - embedding_cache:/app/embedding_cache
     depends_on:
       - redis
     networks:
@@ -37,3 +40,4 @@ networks:
 volumes:
   redis_data:
   uploads_data:
+  embedding_cache:
