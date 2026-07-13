@@ -16,6 +16,7 @@ services:
       - PRESENCE_PENALTY
       - STEP_THRESHOLD
       - EMBEDDING_CACHE_DIR=/app/embedding_cache
+      - EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
       - HF_TOKEN
     volumes:
       - uploads_data:/app/uploads
