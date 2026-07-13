@@ -26,9 +26,11 @@
 		"clsx": "^2.1.1",
 		"embla-carousel-svelte": "^8.6.0",
 		"formsnap": "^2.0.1",
+		"highlight.js": "^11.11.1",
 		"katex": "^0.17.0",
 		"layerchart": "2.0.0-next.48",
 		"lucide-svelte": "^1.0.1",
+		"marked-highlight": "^2.2.4",
 		"marked-katex-extension": "^5.1.10",
 		"mode-watcher": "^1.1.0",
 		"paneforge": "^1.0.2",
@@ -46,7 +48,6 @@
 		"vite": "^8.0.7"
 	},
 	"dependencies": {
-		"@tailwindcss/typography": "^0.5.19",
 		"dompurify": "^3.4.7",
 		"marked": "^15.0.0",
 		"marked-gfm-heading-id": "^4.1.4",

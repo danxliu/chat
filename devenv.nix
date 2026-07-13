@@ -26,6 +26,8 @@
     port = 6379;
   };
 
+  # In dev mode, access the app via the Vite dev server (localhost:5173),
+  # NOT the backend (localhost:8000). Vite proxies /api and /ws to the backend.
   processes.backend.exec = "cd backend && uv run main.py";
-  processes.frontend.exec = "cd frontend && bun run dev";
+  processes.frontend.exec = "cd frontend && bun run dev -- --open";
 }

@@ -1,11 +1,13 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, untrack } from "svelte";
+    import type { Message } from "$lib/stores/chat";
     import {
         connectWebSocket,
         refreshSessions,
         loadModels,
         currentMessages,
         currentSessionId,
+        currentIsGenerating,
         sessions,
         switchSession,
         createNewSession,
@@ -20,6 +22,22 @@
     import * as Sheet from "$lib/components/ui/sheet";
 
     let scrollAreaViewport = $state<HTMLElement | null>(null);
+    let isAtBottom = true;
+    let userScrolledUp = false;
+    let previousSessionId: string | null = null;
+    let previousMessages: Message[] = [];
+
+    function handleScroll(e: Event) {
+        const target = e.target as HTMLElement;
+        const threshold = 100; // px
+        const atBottom =
+            target.scrollHeight - target.scrollTop - target.clientHeight <
+            threshold;
+        isAtBottom = atBottom;
+        if (!atBottom) {
+            userScrolledUp = true;
+        }
+    }
 
     onMount(async () => {
         connectWebSocket();
@@ -36,14 +54,64 @@
 
     // Auto-scroll to bottom when messages change
     $effect(() => {
-        if ($currentMessages && scrollAreaViewport) {
-            const viewport = scrollAreaViewport;
-            setTimeout(() => {
-                viewport.scrollTo({
-                    top: viewport.scrollHeight,
-                    behavior: "smooth",
-                });
-            }, 100);
+        const messages = $currentMessages;
+        const sessionId = $currentSessionId;
+        const isGen = $currentIsGenerating;
+        const viewport = scrollAreaViewport;
+
+        if (messages && viewport) {
+            untrack(() => {
+                const sessionChanged = previousSessionId !== sessionId;
+                const messagesChanged = messages !== previousMessages;
+
+                previousSessionId = sessionId;
+                previousMessages = messages;
+
+                if (!sessionChanged && !messagesChanged) return;
+
+                // Reset scroll state on session switch so the new chat starts fresh.
+                if (sessionChanged) {
+                    userScrolledUp = false;
+                    isAtBottom = true;
+                }
+
+                // The newest message is a user message exactly when the user just
+                // sent something — always jump to the bottom in that case,
+                // regardless of any prior `userScrolledUp` state.
+                const lastMessage = messages[messages.length - 1];
+                const justSentUserMessage =
+                    messagesChanged &&
+                    lastMessage &&
+                    lastMessage.role === "user";
+
+                // History was just loaded for this session (empty → non-empty
+                // while not generating). Always scroll so the user sees the
+                // latest messages.
+                const historyJustLoaded =
+                    messagesChanged &&
+                    previousMessages.length === 0 &&
+                    messages.length > 0 &&
+                    !isGen;
+
+                const shouldScroll =
+                    justSentUserMessage ||
+                    sessionChanged ||
+                    historyJustLoaded ||
+                    (isGen && isAtBottom && !userScrolledUp);
+
+                if (shouldScroll) {
+                    // Use "auto" (instant) for all programmatic scrolls so the
+                    // smooth-scroll animation doesn't fire intermediate scroll
+                    // events that would incorrectly set `userScrolledUp`.
+                    setTimeout(() => {
+                        viewport.scrollTo({
+                            top: viewport.scrollHeight,
+                            behavior: "auto",
+                        });
+                        isAtBottom = true;
+                    }, 50);
+                }
+            });
         }
     });
 </script>
@@ -97,6 +165,7 @@
         <div
             class="flex-1 overflow-y-auto min-h-0 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             bind:this={scrollAreaViewport}
+            onscroll={handleScroll}
         >
             <div
                 class="max-w-4xl w-full mx-auto px-4 flex flex-col gap-6 min-h-full pb-4"

@@ -32,7 +32,7 @@
         class={cn(
             "text-sm transition-all",
             isUser
-                ? "max-w-[85%] rounded-lg px-4 py-2 bg-primary text-primary-foreground shadow-sm"
+                ? "chat-bubble-user max-w-[85%] rounded-lg px-4 py-2 bg-primary text-primary-foreground shadow-sm"
                 : "w-full py-2",
             isSystem &&
                 "bg-destructive/10 text-destructive border border-destructive/20 max-w-full italic px-4 rounded-lg",
@@ -49,17 +49,19 @@
             <div class="flex flex-col gap-4">
                 {#each message.blocks as block (block.index)}
                     {#if block.type === "text"}
-                        <Markdown content={block.content} />
+                        <Markdown content={block.content} {isUser} />
                     {:else if block.type === "chart"}
-                        <DynamicChart 
-                            type={block.content.chart_type} 
-                            title={block.content.title} 
-                            data={block.content.data} 
+                        <DynamicChart
+                            type={block.content.chart_type}
+                            title={block.content.title}
+                            data={block.content.data}
                             labelKey={block.content.label_key}
                             valueKeys={block.content.value_keys}
                         />
                     {:else if block.type === "continuations"}
-                        <Continuations continuations={block.content.continuations} />
+                        <Continuations
+                            continuations={block.content.continuations}
+                        />
                     {/if}
                 {/each}
             </div>
@@ -74,3 +76,4 @@
         {/if}
     </div>
 </div>
+

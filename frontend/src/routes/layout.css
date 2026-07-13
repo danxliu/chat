@@ -1,5 +1,4 @@
 @import 'tailwindcss';
-@plugin "@tailwindcss/typography";
 @import "tw-animate-css";
 @import "shadcn-svelte/tailwind.css";
 @import "@fontsource-variable/inter";
@@ -127,4 +126,12 @@
 	html {
 		@apply font-sans;
 	}
+}
+
+/* Override link color inside user chat bubbles.
+   The bubble has bg-primary, so links need --primary-foreground to be visible.
+   This rule lives here (not in Markdown.svelte) because the Svelte CSS compiler
+   strips :global() rules and custom-property fallbacks during compilation. */
+.markdown-body.is-user a:not(.citation-pill) {
+	color: var(--primary-foreground);
 }
