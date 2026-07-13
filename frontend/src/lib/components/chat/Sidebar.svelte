@@ -14,10 +14,14 @@
     import { cn } from "$lib/utils";
 
     async function handleClearAllChats() {
-        if (!confirm("Are you sure you want to clear ALL chat history?"))
-            return;
+        if (!confirm("Are you sure you want to delete all chats?")) return;
         await fetch("/api/chats", { method: "DELETE" });
         await createNewSession();
+    }
+
+    async function handleClearMemories() {
+        if (!confirm("Are you sure you want to clear all memories?")) return;
+        await fetch("/api/chats/memories", { method: "DELETE" });
     }
 </script>
 
@@ -75,6 +79,15 @@
     </ScrollArea>
 
     <div class="p-4 mt-auto border-t space-y-2">
+        <Button
+            variant="ghost"
+            size="sm"
+            class="w-full justify-start gap-2 text-muted-foreground"
+            onclick={handleClearMemories}
+        >
+            <Trash class="h-4 w-4" />
+            Clear Memory
+        </Button>
         <Button
             variant="ghost"
             size="sm"

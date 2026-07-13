@@ -3,8 +3,10 @@ import json
 import logging
 from typing import Any
 
+import litellm
 import numpy as np
 from fastembed import TextEmbedding
+from pydantic import BaseModel, Field
 
 from agent import get_completion_args
 from config import settings
@@ -12,7 +14,11 @@ from storage import chat_storage
 
 logger = logging.getLogger(__name__)
 
-# --- Fact extraction prompt ---
+
+class ExtractedFacts(BaseModel):
+    facts: list[str] = Field(default_factory=list)
+
+
 FACT_EXTRACTION_PROMPT = """You are a memory extraction system. Analyze the following conversation exchange between a user and an AI assistant.
 
 Extract discrete, standalone facts and preferences about the user that would be useful to remember for future conversations. Focus on:
@@ -35,18 +41,6 @@ JSON array of facts:"""
 
 
 class MemoryManager:
-    """Manages cross-session persistent user memory using embeddings and Redis.
-
-    Memories are extracted from conversations via LLM, embedded with FastEmbed
-    (CPU/ONNX), stored in Redis as base64-encoded float32 vectors, and retrieved
-    via cosine similarity against the user's query.
-
-    Usage:
-        memory = MemoryManager(user_id="default")
-        ctx = await memory.retrieve("What's my preferred language?")
-        await memory.extract_and_store(user_msg, assistant_msg)
-    """
-
     DEFAULT_USER_ID = "default"
 
     def __init__(self, user_id: str | None = None):
@@ -55,57 +49,38 @@ class MemoryManager:
 
     @property
     def embedder(self) -> TextEmbedding:
-        """Lazy-init FastEmbed so the model downloads only on first use."""
         if self._embedder is None:
-            logger.info(
-                "Loading embedding model %s (this may download ~2.2 GB on first run)...",
-                settings.embedding_model,
-            )
+            logger.info("Loading embedding model %s...", settings.embedding_model)
             self._embedder = TextEmbedding(
-                model_name=settings.embedding_model,
-                threads=2,  # CPU-only, 2 threads is plenty
+                model_name=settings.embedding_model, threads=2
             )
             logger.info("Embedding model loaded.")
         return self._embedder
 
     def _encode_embedding(self, embedding: np.ndarray) -> str:
-        """Encode a numpy embedding array as a base64 string."""
         return base64.b64encode(embedding.astype(np.float32).tobytes()).decode()
 
     def _decode_embedding(self, b64_str: str) -> np.ndarray:
-        """Decode a base64 string back into a numpy embedding array."""
         return np.frombuffer(base64.b64decode(b64_str), dtype=np.float32)
 
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
-        """Compute cosine similarity between two vectors."""
         return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     async def retrieve(self, query: str, top_k: int | None = None) -> str:
-        """Retrieve relevant memories for a query. Returns formatted text for prompt injection.
-
-        Returns an empty string if no memories exist.
-        """
         top_k = top_k or settings.memory_top_k
 
         memories = await chat_storage.get_memories(self.user_id)
         if not memories:
             return ""
 
-        # Embed the query (strips "query: " prefix for E5 models automatically)
         query_embedding = next(iter(self.embedder.query_embed([query])))
 
-        # Score all memories by cosine similarity
         scored: list[tuple[float, dict[str, Any]]] = []
         for mem in memories:
             mem_emb = self._decode_embedding(mem["embedding"])
             score = self._cosine_similarity(query_embedding, mem_emb)
             scored.append((score, mem))
 
-        # Sort descending by relevance, take top_k
         scored.sort(key=lambda x: x[0], reverse=True)
         top_memories = [mem for _, mem in scored[:top_k] if _ > 0.1]
 
@@ -118,12 +93,10 @@ class MemoryManager:
         return "\n".join(lines)
 
     async def extract_and_store(self, user_msg: str, assistant_msg: str) -> None:
-        """Extract facts from an exchange and store them. Safe to call as fire-and-forget."""
         facts = await self._extract_facts(user_msg, assistant_msg)
         if not facts:
             return
 
-        # Embed all facts using passage_embed (handles "passage: " prefix for E5)
         embeddings = list(
             self.embedder.passage_embed(facts, batch_size=min(len(facts), 32))
         )
@@ -135,21 +108,13 @@ class MemoryManager:
         logger.info("Stored %d new memories for user '%s'", len(facts), self.user_id)
 
     async def count(self) -> int:
-        """Return the number of stored memories for this user."""
         memories = await chat_storage.get_memories(self.user_id)
         return len(memories)
 
     async def clear(self) -> None:
-        """Delete all memories for this user."""
         await chat_storage.delete_memories(self.user_id)
-        logger.info("Cleared all memories for user '%s'", self.user_id)
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
 
     async def _extract_facts(self, user_msg: str, assistant_msg: str) -> list[str]:
-        """Use a lightweight LLM call to extract facts from the exchange."""
         prompt = FACT_EXTRACTION_PROMPT.format(
             user_msg=user_msg[:2000],
             assistant_msg=assistant_msg[:4000],
@@ -164,8 +129,6 @@ class MemoryManager:
         completion_args["temperature"] = 0.0  # deterministic extraction
 
         try:
-            import litellm
-
             response = await litellm.acompletion(
                 **completion_args,
                 messages=[{"role": "user", "content": prompt}],
@@ -174,24 +137,22 @@ class MemoryManager:
             if not raw:
                 return []
 
-            # Extract JSON array from the response
             raw = raw.strip()
-            # Trim any markdown fences
             if raw.startswith("```"):
                 lines = raw.split("\n")
                 raw = "\n".join(lines[1:]) if len(lines) > 1 else raw
                 if raw.endswith("```"):
                     raw = raw[:-3].strip()
 
-            facts: list[str] = json.loads(raw)
-            if not isinstance(facts, list):
-                return []
+            data = json.loads(raw)
+            if isinstance(data, list):
+                data = {"facts": data}
 
-            # Filter out empty / non-string entries
-            return [f.strip() for f in facts if isinstance(f, str) and f.strip()]
+            validated = ExtractedFacts.model_validate(data)
+            return [f.strip() for f in validated.facts if f.strip()]
 
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse fact extraction JSON: %s", raw[:200])
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning("Failed to parse/validate fact extraction response: %s", e)
             return []
         except Exception:
             logger.exception("Fact extraction failed")

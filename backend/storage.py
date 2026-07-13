@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 from typing import Any
 
 import redis.asyncio as redis
@@ -60,8 +61,6 @@ class ChatStorage:
 
     async def add_memory(self, user_id: str, content: str, embedding_b64: str) -> str:
         """Add a memory with its embedding for a user."""
-        import uuid
-
         memory_id = str(uuid.uuid4())
         memory = json.dumps(
             {

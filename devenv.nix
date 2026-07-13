@@ -21,7 +21,10 @@
   # https://devenv.sh/packages/
   packages = [ pkgs.git ];
 
-  services.redis.enable = true;
+  services.redis = {
+    enable = true;
+    port = 6379;
+  };
 
   processes.backend.exec = "cd backend && uv run main.py";
   processes.frontend.exec = "cd frontend && bun run dev";

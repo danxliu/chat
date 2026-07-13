@@ -123,15 +123,16 @@
 		padding: 0.125rem 0.5rem;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--secondary-foreground);
-		background-color: var(--secondary);
+		color: var(--primary-foreground);
+		background-color: var(--primary);
 		border-radius: 9999px;
 		text-decoration: none;
 		margin-left: 0.25rem;
-		transition: opacity 0.2s;
+		opacity: 0.85;
+		transition: opacity 0.2s ease;
 		vertical-align: middle;
 	}
 	:global(.markdown-body .citation-pill:hover) {
-		opacity: 0.8;
+		opacity: 1;
 	}
 </style>

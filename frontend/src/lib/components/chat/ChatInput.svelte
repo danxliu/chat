@@ -32,17 +32,9 @@
     let isDragging = $state(false);
     let dragCounter = 0;
     let fileInput: HTMLInputElement;
-    let selectedModelValue = $state("");
 
     onMount(() => {
         loadModels();
-    });
-
-    $effect(() => {
-        selectedModelValue = $selectedModel;
-    });
-    $effect(() => {
-        selectedModel.set(selectedModelValue);
     });
 
     function handleKeydown(e: KeyboardEvent) {
@@ -218,7 +210,7 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <Select.Root type="single" bind:value={selectedModelValue}>
+                <Select.Root type="single" value={$selectedModel} onValueChange={(v) => selectedModel.set(v)}>
                     <Select.Trigger
                         size="sm"
                         class="gap-1.5 px-2 font-medium text-xs bg-muted/30 border-0"

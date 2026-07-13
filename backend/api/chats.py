@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from config import settings
+from memory import MemoryManager
 from models import AVAILABLE_MODELS, HistoryResponse
 from storage import chat_storage
 from workflow import AgentExecutor
@@ -72,6 +73,12 @@ async def get_chat_history(session_id: str):
     executor = AgentExecutor(session_id)
     history = await executor.get_history()
     return {"history": history}
+
+
+@router.delete("/memories")
+async def clear_memories():
+    await MemoryManager().clear()
+    return {"status": "success"}
 
 
 @router.delete("/{session_id}")
