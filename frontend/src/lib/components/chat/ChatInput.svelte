@@ -1,7 +1,7 @@
 <script lang="ts">
     import {
         sendMessage,
-        isGenerating,
+        currentIsGenerating,
         cancelGeneration,
         activeModel,
         enableReasoning,
@@ -93,7 +93,7 @@
     }
 
     async function handleSend() {
-        if ($isGenerating) {
+        if ($currentIsGenerating) {
             cancelGeneration();
             return;
         }
@@ -210,7 +210,11 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <Select.Root type="single" value={$selectedModel} onValueChange={(v) => selectedModel.set(v)}>
+                <Select.Root
+                    type="single"
+                    value={$selectedModel}
+                    onValueChange={(v) => selectedModel.set(v)}
+                >
                     <Select.Trigger
                         size="sm"
                         class="gap-1.5 px-2 font-medium text-xs bg-muted/30 border-0"
@@ -228,15 +232,15 @@
                 </Select.Root>
 
                 <Button
-                    variant={$isGenerating ? "destructive" : "default"}
+                    variant={$currentIsGenerating ? "destructive" : "default"}
                     size="icon"
                     onclick={handleSend}
                     disabled={!input.trim() &&
                         pendingAttachments.length === 0 &&
-                        !$isGenerating}
+                        !$currentIsGenerating}
                     class="h-8 w-8"
                 >
-                    {#if $isGenerating}
+                    {#if $currentIsGenerating}
                         <Square class="h-3.5 w-3.5" />
                     {:else}
                         <Send class="h-3.5 w-3.5" />

@@ -1,4 +1,4 @@
-import { writable, get } from "svelte/store";
+import { writable, get, derived } from "svelte/store";
 import { toast } from "svelte-sonner";
 
 export const MessageType = {
@@ -50,15 +50,38 @@ export interface Session {
   title: string;
 }
 
-// Stores
-export const messages = writable<Message[]>([]);
+// Per-session state so multiple chats can be active concurrently
+export const sessionMessages = writable<Record<string, Message[]>>({});
+export const generatingSessions = writable<Record<string, boolean>>({});
 export const sessions = writable<Session[]>([]);
 export const currentSessionId = writable<string | null>(null);
-export const isGenerating = writable(false);
 export const isConnected = writable(false);
 export const models = writable<string[]>([]);
 
-const initialModel = typeof window !== "undefined" ? window.localStorage.getItem("selectedModel") || "" : "";
+// Derived stores for the currently active session
+export const currentMessages = derived(
+  [sessionMessages, currentSessionId],
+  ([$sessionMessages, $currentSessionId]) => {
+    if (!$currentSessionId) return [];
+    return $sessionMessages[$currentSessionId] ?? [];
+  },
+);
+
+export const currentIsGenerating = derived(
+  [generatingSessions, currentSessionId],
+  ([$generatingSessions, $currentSessionId]) => {
+    if (!$currentSessionId) return false;
+    return $generatingSessions[$currentSessionId] ?? false;
+  },
+);
+
+// Keep the old export name for backward compatibility (deprecated, use currentIsGenerating)
+export const isGenerating = currentIsGenerating;
+
+const initialModel =
+  typeof window !== "undefined"
+    ? window.localStorage.getItem("selectedModel") || ""
+    : "";
 export const selectedModel = writable<string>(initialModel);
 
 if (typeof window !== "undefined") {
@@ -133,8 +156,20 @@ function stopPing() {
   if (pingTimeout) clearTimeout(pingTimeout);
 }
 
+/** Update messages for a specific session. Runs the updater function
+ * on that session's message array (or an empty array if not yet loaded). */
+function updateSessionMessages(
+  sessionId: string,
+  updater: (msgs: Message[]) => Message[],
+) {
+  sessionMessages.update((map) => {
+    const current = map[sessionId] ?? [];
+    return { ...map, [sessionId]: updater(current) };
+  });
+}
+
 function handleSocketMessage(payload: any) {
-  const currentSid = get(currentSessionId);
+  const sid: string | undefined = payload.session_id;
 
   switch (payload.type) {
     case MessageType.PONG:
@@ -143,8 +178,8 @@ function handleSocketMessage(payload: any) {
       break;
 
     case MessageType.CONTENT_CHUNK:
-      if (payload.session_id === currentSid) {
-        messages.update((msgs) => {
+      if (sid) {
+        updateSessionMessages(sid, (msgs) => {
           const lastMsg = msgs[msgs.length - 1];
           if (lastMsg && lastMsg.role === "assistant") {
             const targetBlockIndex = lastMsg.blocks.findIndex(
@@ -190,8 +225,8 @@ function handleSocketMessage(payload: any) {
       break;
 
     case MessageType.RICH_BLOCK:
-      if (payload.session_id === currentSid) {
-        messages.update((msgs) => {
+      if (sid) {
+        updateSessionMessages(sid, (msgs) => {
           const lastMsg = msgs[msgs.length - 1];
           if (lastMsg && lastMsg.role === "assistant") {
             return [
@@ -205,8 +240,8 @@ function handleSocketMessage(payload: any) {
       break;
 
     case MessageType.THINKING:
-      if (payload.session_id === currentSid) {
-        messages.update((msgs) => {
+      if (sid) {
+        updateSessionMessages(sid, (msgs) => {
           let lastMsg = msgs[msgs.length - 1];
           if (lastMsg && lastMsg.role === "assistant") {
             let newThought = lastMsg.thought || "";
@@ -237,9 +272,10 @@ function handleSocketMessage(payload: any) {
       break;
 
     case MessageType.MESSAGE:
-      if (payload.session_id === currentSid) {
-        isGenerating.set(false);
-        messages.update((msgs) => {
+      if (sid) {
+        // Mark this session as no longer generating
+        generatingSessions.update((map) => ({ ...map, [sid]: false }));
+        updateSessionMessages(sid, (msgs) => {
           const lastMsg = msgs[msgs.length - 1];
           if (lastMsg && lastMsg.role === "assistant") {
             return [
@@ -273,7 +309,9 @@ function handleSocketMessage(payload: any) {
 
     case MessageType.ERROR:
       console.error("Server error:", payload.message);
-      isGenerating.set(false);
+      if (sid) {
+        generatingSessions.update((map) => ({ ...map, [sid]: false }));
+      }
       toast.error(payload.message);
       break;
 
@@ -306,12 +344,17 @@ export async function loadHistory(sessionId: string) {
       attachments: msg.attachments,
     });
   });
-  messages.set(history);
+  sessionMessages.update((map) => ({ ...map, [sessionId]: history }));
+  return history;
 }
 
 export async function switchSession(sessionId: string) {
   currentSessionId.set(sessionId);
-  await loadHistory(sessionId);
+  // Only fetch from server if we don't already have this session cached
+  const existing = get(sessionMessages)[sessionId];
+  if (!existing) {
+    await loadHistory(sessionId);
+  }
 }
 
 export async function createNewSession() {
@@ -326,11 +369,24 @@ export async function createNewSession() {
 export async function deleteSession(sessionId: string) {
   const res = await fetch(`/api/chats/${sessionId}`, { method: "DELETE" });
   if (!res.ok) throw new Error(`Failed to delete session: ${res.statusText}`);
+
+  // Remove from per-session caches
+  sessionMessages.update((map) => {
+    const next = { ...map };
+    delete next[sessionId];
+    return next;
+  });
+  generatingSessions.update((map) => {
+    const next = { ...map };
+    delete next[sessionId];
+    return next;
+  });
+
   const current = get(currentSessionId);
   if (current === sessionId) {
     currentSessionId.set(null);
-    messages.set([]);
   }
+
   await refreshSessions();
 
   const s = get(sessions);
@@ -346,7 +402,7 @@ export async function loadModels() {
   if (!res.ok) throw new Error(`Failed to load models: ${res.statusText}`);
   const data = await res.json();
   models.set(data.models);
-  
+
   const currentModel = get(selectedModel);
   if (data.models.length > 0) {
     if (!currentModel || !data.models.includes(currentModel)) {
@@ -362,8 +418,8 @@ export function sendMessage(content: string, attachments: Attachment[] = []) {
 
   if (!sid || !socket || socket.readyState !== WebSocket.OPEN) return;
 
-  isGenerating.set(true);
-  messages.update((msgs) => [
+  generatingSessions.update((map) => ({ ...map, [sid]: true }));
+  updateSessionMessages(sid, (msgs) => [
     ...msgs,
     {
       role: "user",
@@ -394,5 +450,5 @@ export function cancelGeneration() {
       session_id: sid,
     }),
   );
-  isGenerating.set(false);
+  generatingSessions.update((map) => ({ ...map, [sid]: false }));
 }
