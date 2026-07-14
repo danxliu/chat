@@ -7,7 +7,10 @@
     import DynamicChart from "./DynamicChart.svelte";
     import Continuations from "./Continuations.svelte";
 
-    let { message }: { message: Message } = $props();
+    let {
+        message,
+        isStreaming = false,
+    }: { message: Message; isStreaming?: boolean } = $props();
 
     const isAssistant = $derived(message.role === "assistant");
     const isUser = $derived(message.role === "user");
@@ -49,7 +52,11 @@
             <div class="flex flex-col gap-4">
                 {#each message.blocks as block (block.index)}
                     {#if block.type === "text"}
-                        <Markdown content={block.content} {isUser} />
+                        <Markdown
+                            content={block.content}
+                            {isUser}
+                            {isStreaming}
+                        />
                     {:else if block.type === "chart"}
                         <DynamicChart
                             type={block.content.chart_type}
@@ -76,4 +83,3 @@
         {/if}
     </div>
 </div>
-

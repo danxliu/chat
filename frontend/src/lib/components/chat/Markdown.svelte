@@ -9,8 +9,11 @@
     import "katex/dist/katex.min.css";
     import "highlight.js/styles/github-dark.min.css";
 
-    let { content = "", isUser = false } = $props();
+    let { content = "", isUser = false, isStreaming = false } = $props();
 
+    // ------------------------------------------------------------------
+    // Citation extension (shared by both parsers)
+    // ------------------------------------------------------------------
     const citationExtension = {
         name: "citation",
         level: "inline",
@@ -34,7 +37,19 @@
         },
     };
 
-    const marked = new Marked(
+    // ------------------------------------------------------------------
+    // Fast parser – no syntax highlighting, no KaTeX, no sanitization.
+    // Used during active streaming for cheap incremental renders.
+    // ------------------------------------------------------------------
+    const fastMarked = new Marked(gfmHeadingId(), mangle());
+    fastMarked.use({ extensions: [citationExtension] });
+
+    // ------------------------------------------------------------------
+    // Full parser – highlight.js + KaTeX + DOMPurify sanitization.
+    // Used for the final render after streaming stops, and for any
+    // non-streaming render (history loads, user messages).
+    // ------------------------------------------------------------------
+    const fullMarked = new Marked(
         markedHighlight({
             langPrefix: "hljs language-",
             highlight(code, lang) {
@@ -49,33 +64,70 @@
         gfmHeadingId(),
         mangle(),
     );
-    marked.use({ extensions: [citationExtension] });
+    fullMarked.use({ extensions: [citationExtension] });
 
-    // Rewrite LaTeX delimiters before `marked` runs its escape pass so its
-    // escape step doesn't strip the backslashes before the katex extension
-    // sees them.  We also escape bare `$` (currency amounts, etc.) so they
-    // aren't misinterpreted as inline-math delimiters by marked-katex.
-    //
-    // Fenced code blocks (``` … ```) and inline code (` … `) are skipped.
+    // ------------------------------------------------------------------
+    // LaTeX delimiter preprocessor (shared)
+    // ------------------------------------------------------------------
     function preprocessLatexDelimiters(src: string): string {
         return src.replace(
             /(```[\s\S]*?```|`[^`]+`)|\$|\\(\[|\]|\(|\))/g,
             (match, codeBlock, delimiter) => {
-                // Leave code blocks / inline code untouched
                 if (codeBlock) return codeBlock;
-                // Bare dollar sign → escaped so marked renders it as literal $
                 if (match === "$") return "\\$";
-                // Swap LaTeX delimiters for marked-katex
                 if (delimiter === "[" || delimiter === "]") return "$$";
                 return "$";
             },
         );
     }
 
-    const html = $derived.by(() => {
-        const preprocessed = preprocessLatexDelimiters(content);
-        const rawHtml = marked.parse(preprocessed) as string;
+    function fastParse(src: string): string {
+        const preprocessed = preprocessLatexDelimiters(src);
+        return fastMarked.parse(preprocessed) as string;
+    }
+
+    function fullParse(src: string): string {
+        const preprocessed = preprocessLatexDelimiters(src);
+        const rawHtml = fullMarked.parse(preprocessed) as string;
         return DOMPurify.sanitize(rawHtml, { ADD_ATTR: ["target"] });
+    }
+
+    // ------------------------------------------------------------------
+    // Reactive HTML output
+    // ------------------------------------------------------------------
+    let html = $state("");
+    let lastStreamedContent = "";
+    let rafId: number | null = null;
+
+    // Effect 1 — streaming rAF loop. Only depends on `isStreaming`.
+    // Reads `content` via untrack() so individual chunk updates don't
+    // tear down / recreate the loop; the rAF tick picks up new content.
+    $effect(() => {
+        if (!isStreaming) return;
+
+        function tick() {
+            const current = content; // read inside rAF, not tracked
+            if (current !== lastStreamedContent) {
+                html = fastParse(current);
+                lastStreamedContent = current;
+            }
+            rafId = requestAnimationFrame(tick);
+        }
+        rafId = requestAnimationFrame(tick);
+
+        return () => {
+            if (rafId !== null) cancelAnimationFrame(rafId);
+            rafId = null;
+        };
+    });
+
+    // Effect 2 — full render for non-streaming content (history loads,
+    // user messages, and the moment streaming stops).  This re-runs
+    // whenever `content` or `isStreaming` changes while isStreaming=false.
+    $effect(() => {
+        if (isStreaming) return;
+        html = fullParse(content);
+        lastStreamedContent = content;
     });
 </script>
 

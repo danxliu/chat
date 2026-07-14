@@ -183,8 +183,12 @@
             <div
                 class="max-w-4xl w-full mx-auto px-4 flex flex-col gap-6 min-h-full pb-4"
             >
-                {#each $currentMessages as message}
-                    <ChatMessage {message} />
+                {#each $currentMessages as message, i}
+                    {@const isStreaming =
+                        $currentIsGenerating &&
+                        i === $currentMessages.length - 1 &&
+                        message.role === "assistant"}
+                    <ChatMessage {message} {isStreaming} />
                 {/each}
 
                 {#if $currentMessages.length === 0}
