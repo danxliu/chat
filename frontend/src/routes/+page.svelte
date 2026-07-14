@@ -24,17 +24,27 @@
     let scrollAreaViewport = $state<HTMLElement | null>(null);
     let isAtBottom = true;
     let userScrolledUp = false;
+    let programmaticScroll = false;
     let previousSessionId: string | null = null;
     let previousMessages: Message[] = [];
 
     function handleScroll(e: Event) {
+        // Ignore scroll events triggered by our own programmatic scrollTo calls.
+        // On Firefox, scroll events fire asynchronously, which can cause a race
+        // where handleScroll runs after content has grown past the scroll target,
+        // poisoning userScrolledUp to true permanently.
+        if (programmaticScroll) return;
+
         const target = e.target as HTMLElement;
         const threshold = 100; // px
         const atBottom =
             target.scrollHeight - target.scrollTop - target.clientHeight <
             threshold;
         isAtBottom = atBottom;
-        if (!atBottom) {
+        if (atBottom) {
+            // User manually scrolled back to the bottom — resume auto-follow.
+            userScrolledUp = false;
+        } else {
             userScrolledUp = true;
         }
     }
@@ -100,16 +110,19 @@
                     (isGen && isAtBottom && !userScrolledUp);
 
                 if (shouldScroll) {
-                    // Use "auto" (instant) for all programmatic scrolls so the
-                    // smooth-scroll animation doesn't fire intermediate scroll
-                    // events that would incorrectly set `userScrolledUp`.
-                    setTimeout(() => {
-                        viewport.scrollTo({
-                            top: viewport.scrollHeight,
-                            behavior: "auto",
+                    // Double requestAnimationFrame ensures the browser has
+                    // completed layout of the new DOM content before we read
+                    // scrollHeight.  setTimeout(50) is unreliable — on fast
+                    // streaming (80+ tokens/sec) and with complex rendering
+                    // (KaTeX, highlight.js), 50 ms is not enough.
+                    programmaticScroll = true;
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            viewport.scrollTop = viewport.scrollHeight;
+                            isAtBottom = true;
+                            programmaticScroll = false;
                         });
-                        isAtBottom = true;
-                    }, 50);
+                    });
                 }
             });
         }
