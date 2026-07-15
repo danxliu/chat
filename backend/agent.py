@@ -10,6 +10,13 @@ from tools.draw_chart import draw_chart
 from tools.execute_python import execute_python
 from tools.finance import get_stock_data, get_stock_history
 from tools.fundamental_analysis import run_fundamental_analysis
+from tools.geolocation import (
+    distance_matrix,
+    get_directions,
+    reverse_geocode,
+    search_location,
+    search_nearby,
+)
 from tools.momentum_analysis import run_momentum_analysis
 from tools.scrape_image import scrape_image
 from tools.search_books import search_books
@@ -42,6 +49,11 @@ def get_tools() -> list[Callable]:
         execute_python,
         draw_chart,
         suggest_continuations,
+        search_location,
+        reverse_geocode,
+        get_directions,
+        search_nearby,
+        distance_matrix,
     ]
 
 

@@ -9,6 +9,7 @@ dependencies = [
     "docker>=7.1.0",
     "easyocr>=1.7.2",
     "fastapi>=0.136.3",
+    "openrouteservice>=2.3.0",
     "fastembed>=0.7.3",
     "httpx>=0.28.0",
     "litellm>=1.86.2",

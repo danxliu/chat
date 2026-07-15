@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     memory_max_count: int = 1000
     memory_extraction_model: str = "deepseek-v4-flash"
 
+    # OpenRouteService (geolocation tools)
+    ors_api_key: str = ""
+
     # Redis
     redis_host: str = "127.0.0.1"
     redis_port: int = 6379
