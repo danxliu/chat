@@ -17,6 +17,7 @@ services:
       - STEP_THRESHOLD
       - EMBEDDING_CACHE_DIR=/app/embedding_cache
       - HF_TOKEN
+      - ORS_API_KEY
     volumes:
       - uploads_data:/app/uploads
       - embedding_cache:/app/embedding_cache
