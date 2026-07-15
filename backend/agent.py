@@ -12,6 +12,10 @@ from tools.finance import get_stock_data, get_stock_history
 from tools.fundamental_analysis import run_fundamental_analysis
 from tools.momentum_analysis import run_momentum_analysis
 from tools.scrape_image import scrape_image
+from tools.search_books import search_books
+from tools.search_images import search_images
+from tools.search_news import search_news
+from tools.search_videos import search_videos
 from tools.sentiment_analysis import run_sentiment_analysis
 from tools.suggest_continuations import suggest_continuations
 from tools.volatility_analysis import run_volatility_analysis
@@ -23,6 +27,10 @@ def get_tools() -> list[Callable]:
     """Returns the list of tool functions available to the agent."""
     return [
         web_search,
+        search_images,
+        search_news,
+        search_videos,
+        search_books,
         web_scrape,
         scrape_image,
         get_stock_data,
