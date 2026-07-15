@@ -11,6 +11,7 @@ from tools.execute_python import execute_python
 from tools.finance import get_stock_data, get_stock_history
 from tools.fundamental_analysis import run_fundamental_analysis
 from tools.momentum_analysis import run_momentum_analysis
+from tools.scrape_image import scrape_image
 from tools.sentiment_analysis import run_sentiment_analysis
 from tools.suggest_continuations import suggest_continuations
 from tools.volatility_analysis import run_volatility_analysis
@@ -23,6 +24,7 @@ def get_tools() -> list[Callable]:
     return [
         web_search,
         web_scrape,
+        scrape_image,
         get_stock_data,
         get_stock_history,
         run_fundamental_analysis,
