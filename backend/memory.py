@@ -8,8 +8,8 @@ import numpy as np
 from fastembed import TextEmbedding
 from pydantic import BaseModel, Field
 
-from agent import get_completion_args, openai_client
 from config import settings
+from llm import get_completion_args, openai_client
 from prompts.fact_extraction import FACT_EXTRACTION_PROMPT
 from storage import chat_storage
 

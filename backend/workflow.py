@@ -9,8 +9,9 @@ from typing import Any, AsyncGenerator
 from pydantic import BaseModel
 from pypdf import PdfReader
 
-from agent import execute_tool, get_completion_args, get_tools_schema, openai_client
+from agent import execute_tool, get_tools_schema
 from config import settings
+from llm import get_completion_args, openai_client
 from memory import MemoryManager
 from models import Attachment, Block, ChatMessage, Metrics
 from prompts import (
