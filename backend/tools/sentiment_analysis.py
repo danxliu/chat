@@ -5,11 +5,11 @@ import json
 import logging
 from typing import Literal
 
-import litellm
 import yfinance as yf
 from pydantic import BaseModel, Field, ValidationError
 
 from config import settings
+from llm import openai_client
 from prompts import SENTIMENT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -99,15 +99,13 @@ def _fetch_articles(tickers: list[str]) -> list[dict]:
 
 
 async def _analyze_one_article(article: dict) -> dict:
-    """Classify sentiment of a single article via litellm. Returns a dict with
+    """Classify sentiment of a single article via LLM. Returns a dict with
     score, label, confidence, reasoning, and tickers."""
     user_prompt = _build_user_prompt(article)
 
     try:
-        response = await litellm.acompletion(
-            model=f"openai/{settings.sentiment_model}",
-            api_base=settings.llm_api_base,
-            api_key=settings.api_key,
+        response = await openai_client.chat.completions.create(
+            model=settings.sentiment_model,
             messages=[
                 {"role": "system", "content": SENTIMENT_SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -230,7 +228,6 @@ async def run_sentiment_analysis(tickers: list[str]) -> str:
     if not articles:
         return "No recent news articles found for the requested tickers."
 
-    # Phase 2: classify sentiment in parallel (async litellm calls)
     sem = asyncio.Semaphore(settings.sentiment_max_concurrency)
 
     async def analyze_one(article: dict) -> dict:

@@ -5,7 +5,6 @@ from typing import Any, Callable, Type
 from pydantic import create_model
 from pydantic.main import BaseModel
 
-from config import settings
 from tools.draw_chart import draw_chart
 from tools.execute_python import execute_python
 from tools.finance import get_stock_data, get_stock_history
@@ -119,17 +118,3 @@ async def execute_tool(name: str, kwargs: dict[str, Any]) -> str:
         return str(result)
     except Exception as e:
         return f"Error executing tool '{name}': {e}"
-
-
-def get_completion_args(model: str) -> dict[str, Any]:
-    """Returns the default arguments for LiteLLM completion."""
-    return {
-        "model": f"openai/{model}",
-        "api_base": settings.llm_api_base,
-        "api_key": settings.api_key,
-        "temperature": settings.temperature,
-        "max_tokens": settings.max_tokens,
-        "frequency_penalty": settings.frequency_penalty,
-        "presence_penalty": settings.presence_penalty,
-        "timeout": settings.timeout,
-    }

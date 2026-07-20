@@ -4,12 +4,11 @@ import logging
 import os
 from typing import Any
 
-import litellm
 import numpy as np
 from fastembed import TextEmbedding
 from pydantic import BaseModel, Field
 
-from agent import get_completion_args
+from agent import get_completion_args, openai_client
 from config import settings
 from prompts.fact_extraction import FACT_EXTRACTION_PROMPT
 from storage import chat_storage
@@ -107,15 +106,10 @@ class MemoryManager:
         )
 
         completion_args = get_completion_args(model=settings.memory_extraction_model)
-        # Remove streaming-related keys — this is a non-streaming call
-        completion_args.pop("stream_options", None)
-        completion_args.pop("tools", None)
-        completion_args.pop("tool_choice", None)
-        completion_args.pop("extra_body", None)
         completion_args["temperature"] = 0.0  # deterministic extraction
 
         try:
-            response = await litellm.acompletion(
+            response = await openai_client.chat.completions.create(
                 **completion_args,
                 messages=[{"role": "user", "content": prompt}],
             )

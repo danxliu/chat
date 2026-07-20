@@ -6,11 +6,10 @@ import time
 from datetime import datetime
 from typing import Any, AsyncGenerator
 
-import litellm
 from pydantic import BaseModel
 from pypdf import PdfReader
 
-from agent import execute_tool, get_completion_args, get_tools_schema
+from agent import execute_tool, get_completion_args, get_tools_schema, openai_client
 from config import settings
 from memory import MemoryManager
 from models import Attachment, Block, ChatMessage, Metrics
@@ -199,7 +198,7 @@ class AgentExecutor:
                         }
                         break
 
-                response = await litellm.acompletion(
+                response = await openai_client.chat.completions.create(
                     **completion_args,
                     messages=api_messages,
                     stream=True,
@@ -210,12 +209,8 @@ class AgentExecutor:
 
                 try:
                     async for chunk in response:
-                        if hasattr(chunk, "usage") and chunk.usage:
-                            usage = chunk.usage
-                            tokens = getattr(usage, "completion_tokens", 0)
-                            if tokens == 0 and isinstance(usage, dict):
-                                tokens = usage.get("completion_tokens", 0)
-                            total_completion_tokens += tokens
+                        if chunk.usage:
+                            total_completion_tokens += chunk.usage.completion_tokens
 
                         if not chunk.choices:
                             continue
@@ -226,6 +221,11 @@ class AgentExecutor:
                         thought = getattr(delta, "reasoning_content", None) or getattr(
                             delta, "reasoning", None
                         )
+                        if thought is None:
+                            extra = getattr(delta, "model_extra", None) or {}
+                            thought = extra.get("reasoning_content") or extra.get(
+                                "reasoning"
+                            )
                         if thought:
                             current_thought += thought
                             yield ThoughtEvent(thought=thought)
