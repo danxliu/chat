@@ -6,15 +6,24 @@
     import Attachment from "./Attachment.svelte";
     import DynamicChart from "./DynamicChart.svelte";
     import Continuations from "./Continuations.svelte";
+    import CopyButton from "./CopyButton.svelte";
+    import RegenerateButton from "./RegenerateButton.svelte";
 
     let {
         message,
         isStreaming = false,
-    }: { message: Message; isStreaming?: boolean } = $props();
+        isLast = false,
+    }: { message: Message; isStreaming?: boolean; isLast?: boolean } = $props();
 
-    const isAssistant = $derived(message.role === "assistant");
     const isUser = $derived(message.role === "user");
     const isSystem = $derived(message.role === "system");
+
+    const rawText = $derived(
+        message.blocks
+            .filter((b) => b.type === "text")
+            .map((b) => b.content)
+            .join("\n\n"),
+    );
 </script>
 
 <div
@@ -74,11 +83,25 @@
             </div>
         {/if}
 
-        {#if message.metrics && isAssistant}
-            <div class="text-[10px] text-muted-foreground opacity-70">
-                Generated {message.metrics.tokens} tokens in {message.metrics.time_s.toFixed(
-                    2,
-                )}s ({message.metrics.tokens_per_sec.toFixed(1)} t/s)
+        {#if message.role === "assistant" && !isStreaming}
+            <div
+                class="flex items-center gap-2 text-[10px] text-muted-foreground opacity-70"
+            >
+                {#if message.metrics}
+                    <span>
+                        Generated {message.metrics.tokens} tokens in {message.metrics.time_s.toFixed(
+                            2,
+                        )}s ({message.metrics.tokens_per_sec.toFixed(
+                            1,
+                        )} t/s)
+                    </span>
+                {/if}
+                {#if rawText}
+                    <CopyButton text={rawText} />
+                {/if}
+                {#if isLast}
+                    <RegenerateButton />
+                {/if}
             </div>
         {/if}
     </div>

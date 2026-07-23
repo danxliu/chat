@@ -26,6 +26,7 @@ DEFAULT_USER_ID = "default"
 
 class MessageType(str, Enum):
     MESSAGE = "message"
+    REGENERATE = "regenerate"
     THINKING = "thinking"
     CONTENT_CHUNK = "content_chunk"
     RICH_BLOCK = "rich_block"
@@ -54,6 +55,11 @@ class IncomingPayload(BaseModel):
                 raise ValueError("Missing session_id")
             if not self.content:
                 raise ValueError("Missing content")
+            if not self.model:
+                raise ValueError("Missing model selection")
+        elif self.type == MessageType.REGENERATE:
+            if not self.session_id:
+                raise ValueError("Missing session_id")
             if not self.model:
                 raise ValueError("Missing model selection")
         return self
@@ -105,6 +111,84 @@ class ConnectionManager:
             task.cancel()
 
 
+async def _stream_response(
+    event_stream,
+    cancel_event: asyncio.Event,
+    conn: ConnectionManager,
+    session_id: str,
+):
+    """Dispatch events from an AgentExecutor generator to the WebSocket."""
+    final_response = ""
+    metrics = None
+
+    async for event in event_stream:
+        if cancel_event.is_set():
+            logger.info(f"Session {session_id} cancelled.")
+            return
+
+        match event:
+            case ThoughtEvent(thought=t):
+                await conn.send(
+                    {
+                        "type": MessageType.THINKING.value,
+                        "session_id": session_id,
+                        "data": {"type": "thought", "content": t},
+                    }
+                )
+            case ToolCallEvent(tool_name=n, tool_kwargs=k):
+                await conn.send(
+                    {
+                        "type": MessageType.THINKING.value,
+                        "session_id": session_id,
+                        "data": {"type": "tool_call", "tool": n, "args": k},
+                    }
+                )
+            case ContentEvent(content=c, block_index=idx):
+                await conn.send(
+                    {
+                        "type": MessageType.CONTENT_CHUNK.value,
+                        "session_id": session_id,
+                        "content": c,
+                        "block_index": idx,
+                    }
+                )
+            case RichBlockEvent(block=b):
+                await conn.send(
+                    {
+                        "type": MessageType.RICH_BLOCK.value,
+                        "session_id": session_id,
+                        "block": b.model_dump(),
+                    }
+                )
+            case TokenUsageEvent(current_tokens=cur, max_tokens=mx):
+                await conn.send(
+                    {
+                        "type": MessageType.TOKEN_USAGE.value,
+                        "session_id": session_id,
+                        "current_tokens": cur,
+                        "max_tokens": mx,
+                    }
+                )
+            case FinalResponseEvent(content=c, metrics=m):
+                final_response = c
+                metrics = m
+            case ErrorEvent(error=e):
+                await conn.send_error(e, session_id)
+            case WarningEvent(warning=w):
+                await conn.send_warning(w, session_id)
+            case str(content):
+                final_response = content
+
+    await conn.send(
+        {
+            "type": MessageType.MESSAGE.value,
+            "session_id": session_id,
+            "content": final_response,
+            "metrics": metrics,
+        }
+    )
+
+
 async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
     user_id = payload.user_id
 
@@ -130,83 +214,33 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
 
     try:
         executor = AgentExecutor(payload.session_id, user_id=user_id)
-        final_response = ""
-        metrics = None
-
-        async for event in executor.run(
+        event_stream = executor.run(
             query=payload.content,
             model_name=payload.model,
             attachments=payload.attachments,
             enable_reasoning=payload.enable_reasoning,
-        ):
-            if cancel_event.is_set():
-                logger.info(f"Session {payload.session_id} cancelled.")
-                return  # Exit early on cancellation
-
-            match event:
-                case ThoughtEvent(thought=t):
-                    await conn.send(
-                        {
-                            "type": MessageType.THINKING.value,
-                            "session_id": payload.session_id,
-                            "data": {"type": "thought", "content": t},
-                        }
-                    )
-                case ToolCallEvent(tool_name=n, tool_kwargs=k):
-                    await conn.send(
-                        {
-                            "type": MessageType.THINKING.value,
-                            "session_id": payload.session_id,
-                            "data": {"type": "tool_call", "tool": n, "args": k},
-                        }
-                    )
-                case ContentEvent(content=c, block_index=idx):
-                    await conn.send(
-                        {
-                            "type": MessageType.CONTENT_CHUNK.value,
-                            "session_id": payload.session_id,
-                            "content": c,
-                            "block_index": idx,
-                        }
-                    )
-                case RichBlockEvent(block=b):
-                    await conn.send(
-                        {
-                            "type": MessageType.RICH_BLOCK.value,
-                            "session_id": payload.session_id,
-                            "block": b.model_dump(),
-                        }
-                    )
-                case TokenUsageEvent(current_tokens=cur, max_tokens=mx):
-                    await conn.send(
-                        {
-                            "type": MessageType.TOKEN_USAGE.value,
-                            "session_id": payload.session_id,
-                            "current_tokens": cur,
-                            "max_tokens": mx,
-                        }
-                    )
-                case FinalResponseEvent(content=c, metrics=m):
-                    final_response = c
-                    metrics = m
-                case ErrorEvent(error=e):
-                    await conn.send_error(e, payload.session_id)
-                case WarningEvent(warning=w):
-                    await conn.send_warning(w, payload.session_id)
-                case str(content):
-                    final_response = content
-
-        await conn.send(
-            {
-                "type": MessageType.MESSAGE.value,
-                "session_id": payload.session_id,
-                "content": final_response,
-                "metrics": metrics,
-            }
         )
-
+        await _stream_response(event_stream, cancel_event, conn, payload.session_id)
     except Exception as e:
         logger.exception("Error during chat processing")
+        await conn.send_error(str(e), payload.session_id)
+    finally:
+        conn.cancel_events.pop(payload.session_id, None)
+
+
+async def process_regenerate(payload: IncomingPayload, conn: ConnectionManager):
+    cancel_event = conn.get_cancel_event(payload.session_id)
+    cancel_event.clear()
+
+    try:
+        executor = AgentExecutor(payload.session_id, user_id=payload.user_id)
+        event_stream = executor.regenerate(
+            model_name=payload.model,
+            enable_reasoning=payload.enable_reasoning,
+        )
+        await _stream_response(event_stream, cancel_event, conn, payload.session_id)
+    except Exception as e:
+        logger.exception("Error during regenerate")
         await conn.send_error(str(e), payload.session_id)
     finally:
         conn.cancel_events.pop(payload.session_id, None)
@@ -239,6 +273,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         conn.get_cancel_event(payload.session_id).set()
                 case MessageType.MESSAGE:
                     conn.spawn_task(process_chat(payload, conn))
+                case MessageType.REGENERATE:
+                    conn.spawn_task(process_regenerate(payload, conn))
 
     except WebSocketDisconnect:
         logger.info("Client disconnected")

@@ -170,7 +170,8 @@
                         $currentIsGenerating &&
                         i === $currentMessages.length - 1 &&
                         message.role === "assistant"}
-                    <ChatMessage {message} {isStreaming} />
+                    {@const isLast = i === $currentMessages.length - 1}
+                    <ChatMessage {message} {isStreaming} {isLast} />
                 {/each}
 
                 {#if $currentMessages.length === 0}

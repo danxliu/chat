@@ -203,6 +203,25 @@ class AgentExecutor:
         }
         completion_args["stream_options"] = {"include_usage": True}
 
+        async for event in self._generate(
+            user_content=user_content,
+            model_name=model_name,
+            enable_reasoning=enable_reasoning,
+            completion_args=completion_args,
+            compacted_query=query,
+        ):
+            yield event
+
+    async def _generate(
+        self,
+        user_content: str | list[dict],
+        model_name: str,
+        enable_reasoning: bool,
+        completion_args: dict,
+        compacted_query: str,
+    ) -> AsyncGenerator[Any, None]:
+        """Shared generation loop used by both run() and regenerate()
+        after the caller has set up chat_history and user_content."""
         final_content = ""
         should_stop = False
         start_time = time.time()
@@ -342,13 +361,12 @@ class AgentExecutor:
                     if total_prompt_tokens > 0:
                         self.state["last_prompt_tokens"] = total_prompt_tokens
                     else:
-                        # Fallback: estimate from message content lengths (~4 chars/token)
                         self.state["last_prompt_tokens"] = self._estimate_prompt_tokens()
                     await self._save_state()
 
                     # Fire-and-forget: extract memories from this exchange
                     asyncio.create_task(
-                        self.memory.extract_and_store(query, final_content)
+                        self.memory.extract_and_store(compacted_query, final_content)
                     )
 
                     max_ctx = get_model_context_limit(model_name)
@@ -364,6 +382,78 @@ class AgentExecutor:
             yield ErrorEvent(error=str(e))
         finally:
             await self._save_state()
+
+    async def regenerate(
+        self,
+        model_name: str,
+        enable_reasoning: bool = True,
+    ) -> AsyncGenerator[Any, None]:
+        """Regenerate the last assistant response.
+
+        Pops the last assistant (and any tool) messages from history,
+        then re-runs generation using the existing user message without
+        appending a duplicate.
+        """
+        await self._load_state()
+
+        history = self.state["chat_history"]
+        while history and history[-1].get("role") != "user":
+            history.pop()
+
+        if not history:
+            yield ErrorEvent(error="No user message found to regenerate from")
+            return
+
+        last_user_msg = history[-1]
+        query = last_user_msg.get("content", "")
+        attachments = last_user_msg.get("attachments")
+
+        processed_attachments, extra_content = self._process_attachments(attachments)
+        full_query = query + extra_content
+
+        # Check if auto-compaction is needed before this turn
+        if self._needs_compaction():
+            logger.info(
+                "Triggering compaction for session %s (prompt_tokens=%d, limit=%d)",
+                self.session_id,
+                self.state.get("last_prompt_tokens", 0),
+                settings.max_context_tokens,
+            )
+            await self._compact()
+            await self._save_state()
+
+        # Retrieve relevant cross-session memories
+        memory_context = await self.memory.retrieve(full_query)
+
+        formatted_query_text = STARTING_PROMPT_TEMPLATE.format(
+            query=full_query,
+            current_date=datetime.now().strftime("%A, %B %d, %Y"),
+            memory_context=memory_context or "(No prior memories yet.)",
+        )
+
+        # Build multi-modal message if there are images
+        if processed_attachments:
+            user_content = [{"type": "text", "text": formatted_query_text}]
+            user_content.extend(processed_attachments)
+        else:
+            user_content = formatted_query_text
+
+        completion_args = get_completion_args(model=model_name)
+        completion_args["tools"] = get_tools_schema()
+        completion_args["tool_choice"] = "auto"
+        completion_args["extra_body"] = {
+            "chat_template_kwargs": {"enable_thinking": enable_reasoning}
+        }
+        completion_args["stream_options"] = {"include_usage": True}
+
+        async for event in self._generate(
+            user_content=user_content,
+            model_name=model_name,
+            enable_reasoning=enable_reasoning,
+            completion_args=completion_args,
+            compacted_query=query,
+        ):
+            yield event
 
     async def _compact(self) -> None:
         """Summarize older messages into a rolling compaction summary,

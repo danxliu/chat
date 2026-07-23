@@ -4,6 +4,7 @@ import { userUUID } from "$lib/stores/user";
 
 export const MessageType = {
   MESSAGE: "message",
+  REGENERATE: "regenerate",
   THINKING: "thinking",
   CONTENT_CHUNK: "content_chunk",
   RICH_BLOCK: "rich_block",
@@ -502,6 +503,35 @@ export function cancelGeneration() {
     }),
   );
   generatingSessions.update((map) => ({ ...map, [sid]: false }));
+}
+
+export function regenerateResponse() {
+  const sid = get(currentSessionId);
+  const model = get(activeModel);
+  const reasoning = get(enableReasoning);
+
+  if (!sid || !socket || socket.readyState !== WebSocket.OPEN) return;
+
+  generatingSessions.update((map) => ({ ...map, [sid]: true }));
+
+  // Remove the last assistant message so the UI doesn't show a stale response
+  updateSessionMessages(sid, (msgs) => {
+    const updated = [...msgs];
+    if (updated.length > 0 && updated[updated.length - 1].role === "assistant") {
+      updated.pop();
+    }
+    return updated;
+  });
+
+  socket.send(
+    JSON.stringify({
+      type: MessageType.REGENERATE,
+      session_id: sid,
+      user_id: get(userUUID),
+      model,
+      enable_reasoning: reasoning,
+    }),
+  );
 }
 
 export function disconnectWebSocket() {
