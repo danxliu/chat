@@ -12,8 +12,8 @@
     );
 </script>
 
-<div class="my-2">
-    <Collapsible.Root bind:open={isOpen} class="space-y-2">
+<div>
+    <Collapsible.Root bind:open={isOpen} class="space-y-1">
         <Collapsible.Trigger
             class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -25,7 +25,7 @@
                     : ''}"
             />
         </Collapsible.Trigger>
-        <Collapsible.Content class="space-y-2">
+        <Collapsible.Content class="space-y-1">
             <div class="rounded-md border bg-muted/30 p-3 text-sm">
                 <Markdown content={thought} />
             </div>

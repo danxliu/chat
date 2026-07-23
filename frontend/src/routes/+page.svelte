@@ -176,12 +176,12 @@
         </header>
 
         <div
-            class="flex-1 overflow-y-auto min-h-0 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            class="flex-1 overflow-y-auto min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             bind:this={scrollAreaViewport}
             onscroll={handleScroll}
         >
             <div
-                class="max-w-4xl w-full mx-auto px-4 flex flex-col gap-6 min-h-full pb-4"
+                class="max-w-4xl w-full mx-auto p-4 flex flex-col gap-3 min-h-full"
             >
                 {#each $currentMessages as message, i}
                     {@const isStreaming =
@@ -208,7 +208,7 @@
             </div>
         </div>
 
-        <div class="max-w-4xl w-full mx-auto shrink-0 px-4">
+        <div class="max-w-4xl w-full mx-auto shrink-0 px-4 pb-6">
             <ChatInput />
         </div>
     </main>

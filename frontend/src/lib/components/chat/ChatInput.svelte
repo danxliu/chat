@@ -137,7 +137,7 @@
     }
 </script>
 
-<div class="bg-background mb-10">
+<div class="bg-background">
     <div
         class="relative flex flex-col border rounded-xl bg-background focus-within:ring-1 focus-within:ring-ring transition-all duration-200"
         role="region"
@@ -157,7 +157,7 @@
         {/if}
 
         {#if pendingAttachments.length > 0}
-            <div class="flex flex-wrap gap-2 px-4 pt-4 pb-0">
+            <div class="flex flex-wrap gap-2 p-4 pb-0">
                 {#each pendingAttachments as att}
                     <Attachment
                         attachment={att}
@@ -170,12 +170,12 @@
         <Textarea
             bind:value={input}
             placeholder="Type your message..."
-            class="min-h-[120px] max-h-[300px] resize-none border-0 focus-visible:ring-0 shadow-none px-4 pt-4"
+            class="min-h-[120px] max-h-[300px] resize-none border-0 focus-visible:ring-0 shadow-none p-4"
             onkeydown={handleKeydown}
             onpaste={handlePaste}
         />
 
-        <div class="flex items-center justify-between gap-4 p-2">
+        <div class="flex items-center justify-between gap-4 p-3">
             <div class="flex items-center gap-1">
                 <Button
                     variant="ghost"

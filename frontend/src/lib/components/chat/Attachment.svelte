@@ -15,7 +15,7 @@
 	const imageUrl = $derived(`/uploads/${attachment.stored_filename}`);
 </script>
 
-<div class="relative group w-20 h-20 rounded-lg border bg-muted overflow-hidden flex flex-col items-center justify-center text-center p-1 shadow-sm">
+<div class="relative group w-20 h-20 rounded-lg border bg-muted overflow-hidden flex flex-col items-center justify-center gap-1 text-center p-1 shadow-sm">
 	{#if isImage}
 		<img 
 			src={imageUrl} 
@@ -23,7 +23,7 @@
 			class="absolute inset-0 w-full h-full object-cover"
 		/>
 	{:else}
-		<FileText class="h-8 w-8 text-muted-foreground mb-1" />
+		<FileText class="h-8 w-8 text-muted-foreground" />
 		<span class="text-[10px] leading-tight text-muted-foreground break-all px-1">
 			{truncateMiddle(attachment.filename, 12)}
 		</span>

@@ -10,7 +10,7 @@
     }
 </script>
 
-<div class="flex flex-wrap gap-2 mt-2">
+<div class="flex flex-wrap gap-2">
     {#each continuations as text}
         <Button 
             variant="outline" 

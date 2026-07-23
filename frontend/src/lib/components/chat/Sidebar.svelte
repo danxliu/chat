@@ -70,7 +70,7 @@
         </div>
     </div>
 
-    <ScrollArea class="flex-1 m-4">
+    <ScrollArea class="flex-1 p-4">
         <div class="flex flex-col gap-2">
             <Button
                 onclick={createNewSession}
@@ -81,7 +81,7 @@
                 New Chat
             </Button>
             {#each $sessions as session}
-                <div class="group relative">
+                <div class="group relative flex items-center">
                     <Button
                         variant={session.session_id === $currentSessionId
                             ? "secondary"
@@ -92,24 +92,25 @@
                         <MessageSquare class="mr-2 h-4 w-4 shrink-0" />
                         <span class="truncate">{session.title}</span>
                     </Button>
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="icon"
                         onclick={(e) => {
                             e.stopPropagation();
                             deleteSession(session.session_id);
                         }}
-                        class="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-opacity"
+                        class="absolute right-1 opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 h-8 w-8"
                     >
                         <Trash2 class="h-4 w-4" />
-                    </button>
+                    </Button>
                 </div>
             {/each}
         </div>
     </ScrollArea>
 
-    <div class="p-4 mt-auto border-t space-y-2">
+    <div class="p-4 border-t flex flex-col gap-2 shrink-0">
         <Button
             variant="ghost"
-            size="sm"
             class="w-full justify-start gap-2 text-muted-foreground"
             onclick={() => (settingsOpen = true)}
         >
@@ -118,7 +119,6 @@
         </Button>
         <Button
             variant="ghost"
-            size="sm"
             class="w-full justify-start gap-2 text-muted-foreground"
             onclick={handleClearMemories}
         >
@@ -127,7 +127,6 @@
         </Button>
         <Button
             variant="ghost"
-            size="sm"
             class="w-full justify-start gap-2 text-muted-foreground"
             onclick={handleClearAllChats}
         >

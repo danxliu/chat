@@ -19,12 +19,12 @@
 
 <div
     class={cn(
-        "flex w-full flex-col gap-2",
+        "flex w-full flex-col gap-1",
         isUser ? "items-end" : "items-start",
     )}
 >
     {#if message.attachments && message.attachments.length > 0}
-        <div class="flex flex-wrap gap-2 mb-2">
+        <div class="flex flex-wrap gap-2">
             {#each message.attachments as attachment}
                 <Attachment {attachment} />
             {/each}
@@ -33,10 +33,10 @@
 
     <div
         class={cn(
-            "text-sm transition-all",
+            "text-sm transition-all flex flex-col gap-1",
             isUser
                 ? "chat-bubble-user max-w-[85%] rounded-lg px-4 py-2 bg-primary text-primary-foreground shadow-sm"
-                : "w-full py-2",
+                : "w-full py-1",
             isSystem &&
                 "bg-destructive/10 text-destructive border border-destructive/20 max-w-full italic px-4 rounded-lg",
         )}
@@ -49,7 +49,7 @@
         {/if}
 
         {#if message.blocks && message.blocks.length > 0}
-            <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-2">
                 {#each message.blocks as block (block.index)}
                     {#if block.type === "text"}
                         <Markdown
@@ -75,7 +75,7 @@
         {/if}
 
         {#if message.metrics && isAssistant}
-            <div class="mt-2 text-[10px] text-muted-foreground opacity-70">
+            <div class="text-[10px] text-muted-foreground opacity-70">
                 Generated {message.metrics.tokens} tokens in {message.metrics.time_s.toFixed(
                     2,
                 )}s ({message.metrics.tokens_per_sec.toFixed(1)} t/s)

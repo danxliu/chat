@@ -132,106 +132,16 @@
 </script>
 
 <div
-    class="markdown-body max-w-none flex flex-col gap-4"
+    class="markdown-body prose prose-sm dark:prose-invert max-w-none flex flex-col gap-1.5"
     class:is-user={isUser}
 >
     {@html html}
 </div>
 
 <style>
-    /* --- Code blocks & syntax highlighting --- */
-    :global(.markdown-body pre) {
-        background-color: var(--muted);
-        padding: 1rem;
-        border-radius: 0.5rem;
-        overflow-x: auto;
-    }
-    :global(.markdown-body pre code) {
-        background-color: transparent;
-        padding: 0;
-        border-radius: 0;
-        font-size: 0.8125rem;
-        line-height: 1.6;
-    }
-    :global(.markdown-body code) {
-        background-color: var(--muted);
-        padding: 0.125rem 0.25rem;
-        border-radius: 0.25rem;
-        font-family:
-            ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-            "Liberation Mono", "Courier New", monospace;
-        font-size: 0.875rem;
-    }
     /* Override highlight.js theme background so it inherits from our pre */
     :global(.markdown-body pre code.hljs) {
         background: transparent;
-    }
-
-    /* --- Headings --- */
-    :global(.markdown-body h1) {
-        font-size: 1.5rem;
-        font-weight: 700;
-    }
-    :global(.markdown-body h2) {
-        font-size: 1.25rem;
-        font-weight: 600;
-    }
-    :global(.markdown-body h3) {
-        font-size: 1.125rem;
-        font-weight: 600;
-    }
-
-    /* --- Lists --- */
-    :global(.markdown-body ul) {
-        list-style-type: disc;
-        padding-left: 1.5rem;
-    }
-    :global(.markdown-body ol) {
-        list-style-type: decimal;
-        padding-left: 1.5rem;
-    }
-    :global(.markdown-body li) {
-        margin-bottom: 0.25rem;
-    }
-
-    /* --- Tables --- */
-    :global(.markdown-body table) {
-        width: 100%;
-        border-collapse: collapse;
-    }
-    :global(.markdown-body th),
-    :global(.markdown-body td) {
-        border: 1px solid var(--border);
-        padding: 0.5rem;
-        text-align: left;
-    }
-    :global(.markdown-body th) {
-        background-color: var(--muted);
-        font-weight: 600;
-    }
-    :global(.markdown-body tr:nth-child(even)) {
-        background-color: color-mix(in srgb, var(--muted) 50%, transparent);
-    }
-
-    /* --- Blockquotes --- */
-    :global(.markdown-body blockquote) {
-        border-left-width: 4px;
-        border-left-color: var(--primary);
-        padding-left: 1rem;
-        font-style: italic;
-    }
-
-    /* --- Horizontal rules --- */
-    :global(.markdown-body hr) {
-        border: 0;
-        border-top: 1px solid var(--border);
-    }
-
-    /* --- Links --- */
-    :global(.markdown-body a:not(.citation-pill)) {
-        color: var(--primary);
-        text-decoration: underline;
-        text-underline-offset: 4px;
     }
 
     /* --- Citations --- */

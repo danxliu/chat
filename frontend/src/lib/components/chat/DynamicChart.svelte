@@ -53,7 +53,7 @@
     ];
 </script>
 
-<Card class="w-full mt-4">
+<Card class="w-full">
     <CardHeader>
         <CardTitle>{title}</CardTitle>
     </CardHeader>
