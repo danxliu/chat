@@ -189,14 +189,25 @@ class AgentExecutor:
 
         try:
             while not should_stop:
-                api_messages = self.state["chat_history"].copy()
+                # Build API-compatible messages (strip non-standard keys like
+                # "thought", "metrics", "attachments" that we store for the UI).
+                api_messages = []
+                for msg in self.state["chat_history"]:
+                    cleaned: dict[str, Any] = {"role": msg["role"]}
+                    if "content" in msg:
+                        cleaned["content"] = msg["content"]
+                    if "tool_calls" in msg:
+                        cleaned["tool_calls"] = msg["tool_calls"]
+                    if "tool_call_id" in msg:
+                        cleaned["tool_call_id"] = msg["tool_call_id"]
+                    if "name" in msg:
+                        cleaned["name"] = msg["name"]
+                    api_messages.append(cleaned)
+
                 # Inject the formatted prompt into the most recent user message for the API call
                 for i in reversed(range(len(api_messages))):
                     if api_messages[i]["role"] == "user":
-                        api_messages[i] = {
-                            **api_messages[i],
-                            "content": user_content,
-                        }
+                        api_messages[i]["content"] = user_content
                         break
 
                 response = await openai_client.chat.completions.create(
