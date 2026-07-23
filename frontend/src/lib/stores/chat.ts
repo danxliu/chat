@@ -7,6 +7,7 @@ export const MessageType = {
   THINKING: "thinking",
   CONTENT_CHUNK: "content_chunk",
   RICH_BLOCK: "rich_block",
+  TOKEN_USAGE: "token_usage",
   TITLE_UPDATE: "title_update",
   PING: "ping",
   PONG: "pong",
@@ -22,6 +23,11 @@ export interface Attachment {
   filename: string;
   stored_filename: string;
   mime_type: string;
+}
+
+export interface TokenUsage {
+  current: number;
+  max: number;
 }
 
 export interface Metrics {
@@ -54,6 +60,7 @@ export interface Session {
 // Per-session state so multiple chats can be active concurrently
 export const sessionMessages = writable<Record<string, Message[]>>({});
 export const generatingSessions = writable<Record<string, boolean>>({});
+export const sessionTokenUsage = writable<Record<string, TokenUsage>>({});
 export const sessions = writable<Session[]>([]);
 export const currentSessionId = writable<string | null>(null);
 export const isConnected = writable(false);
@@ -65,6 +72,14 @@ export const currentMessages = derived(
   ([$sessionMessages, $currentSessionId]) => {
     if (!$currentSessionId) return [];
     return $sessionMessages[$currentSessionId] ?? [];
+  },
+);
+
+export const currentTokenUsage = derived(
+  [sessionTokenUsage, currentSessionId],
+  ([$sessionTokenUsage, $currentSessionId]) => {
+    if (!$currentSessionId) return { current: 0, max: 100000 };
+    return $sessionTokenUsage[$currentSessionId] ?? { current: 0, max: 100000 };
   },
 );
 
@@ -309,6 +324,18 @@ function handleSocketMessage(payload: any) {
       refreshSessions();
       break;
 
+    case MessageType.TOKEN_USAGE:
+      if (sid) {
+        sessionTokenUsage.update((map) => ({
+          ...map,
+          [sid]: {
+            current: payload.current_tokens,
+            max: payload.max_tokens,
+          },
+        }));
+      }
+      break;
+
     case MessageType.ERROR:
       console.error("Server error:", payload.message);
       if (sid) {
@@ -353,16 +380,24 @@ export async function loadHistory(sessionId: string) {
     });
   });
   sessionMessages.update((map) => ({ ...map, [sessionId]: history }));
+
+  // Restore token usage from persisted state
+  if (data.token_usage) {
+    sessionTokenUsage.update((map) => ({
+      ...map,
+      [sessionId]: {
+        current: data.token_usage.current,
+        max: data.token_usage.max,
+      },
+    }));
+  }
+
   return history;
 }
 
 export async function switchSession(sessionId: string) {
   currentSessionId.set(sessionId);
-  // Only fetch from server if we don't already have this session cached
-  const existing = get(sessionMessages)[sessionId];
-  if (!existing) {
-    await loadHistory(sessionId);
-  }
+  await loadHistory(sessionId);
 }
 
 export async function createNewSession() {

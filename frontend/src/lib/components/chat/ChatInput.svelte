@@ -25,6 +25,7 @@
     } from "lucide-svelte";
     import type { Attachment as AttachmentType } from "$lib/stores/chat";
     import Attachment from "./Attachment.svelte";
+    import ContextBar from "./ContextBar.svelte";
     import { onMount } from "svelte";
 
     let input = $state("");
@@ -210,6 +211,8 @@
             </div>
 
             <div class="flex items-center gap-2">
+                <ContextBar />
+
                 <Select.Root
                     type="single"
                     value={$selectedModel}

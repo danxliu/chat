@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     memory_max_count: int = 1000
     memory_extraction_model: str = "deepseek-v4-flash"
 
+    # Context window management (auto-compaction)
+    max_context_tokens: int = 100000
+    compaction_trigger_pct: float = 0.75
+    compaction_keep_recent: int = 6
+    compaction_model: str = "deepseek-v4-flash"
+    compaction_max_tokens: int = 2048
+    compaction_temperature: float = 0.0
+    compaction_tool_result_max_chars: int = 500
+
     # OpenRouteService (geolocation tools)
     ors_api_key: str = ""
 

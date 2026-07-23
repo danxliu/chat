@@ -11,6 +11,11 @@ logger = logging.getLogger(__name__)
 AVAILABLE_MODELS: list[str] = []
 
 
+def get_model_context_limit(model_name: str | None = None) -> int:
+    """Return the max context token limit for a model."""
+    return settings.max_context_tokens
+
+
 async def refresh_models() -> list[str]:
     """Fetch available models from OpenCode Go. Falls back to hardcoded default."""
     global AVAILABLE_MODELS
@@ -74,3 +79,4 @@ class ChatMessage(BaseModel):
 
 class HistoryResponse(BaseModel):
     history: list[ChatMessage]
+    token_usage: dict | None = None

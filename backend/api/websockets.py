@@ -13,6 +13,7 @@ from workflow import (
     FinalResponseEvent,
     RichBlockEvent,
     ThoughtEvent,
+    TokenUsageEvent,
     ToolCallEvent,
     WarningEvent,
 )
@@ -28,6 +29,7 @@ class MessageType(str, Enum):
     THINKING = "thinking"
     CONTENT_CHUNK = "content_chunk"
     RICH_BLOCK = "rich_block"
+    TOKEN_USAGE = "token_usage"
     TITLE_UPDATE = "title_update"
     PING = "ping"
     PONG = "pong"
@@ -173,6 +175,15 @@ async def process_chat(payload: IncomingPayload, conn: ConnectionManager):
                             "type": MessageType.RICH_BLOCK.value,
                             "session_id": payload.session_id,
                             "block": b.model_dump(),
+                        }
+                    )
+                case TokenUsageEvent(current_tokens=cur, max_tokens=mx):
+                    await conn.send(
+                        {
+                            "type": MessageType.TOKEN_USAGE.value,
+                            "session_id": payload.session_id,
+                            "current_tokens": cur,
+                            "max_tokens": mx,
                         }
                     )
                 case FinalResponseEvent(content=c, metrics=m):

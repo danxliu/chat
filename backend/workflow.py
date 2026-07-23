@@ -13,8 +13,9 @@ from agent import execute_tool, get_tools_schema
 from config import settings
 from llm import get_completion_args, openai_client
 from memory import MemoryManager
-from models import Attachment, Block, ChatMessage, Metrics
+from models import Attachment, Block, ChatMessage, Metrics, get_model_context_limit
 from prompts import (
+    COMPACTION_PROMPT,
     STARTING_PROMPT_TEMPLATE,
 )
 from storage import chat_storage
@@ -64,6 +65,11 @@ class FinalResponseEvent(BaseModel):
     metrics: dict[str, Any] | None = None
 
 
+class TokenUsageEvent(BaseModel):
+    current_tokens: int
+    max_tokens: int
+
+
 def build_rich_block(tool_name: str, args: dict, index: int) -> Block | None:
     if tool_name == "draw_chart":
         return Block(index=index, type="chart", content=args)
@@ -81,13 +87,19 @@ class AgentExecutor:
 
     async def _load_state(self):
         state = await chat_storage.load_context(self.user_id, self.session_id)
+        defaults = {
+            "chat_history": [],
+            "metadata": {"session_id": self.session_id},
+            "compacted_summary": None,
+            "summarized_until_index": 0,
+            "last_prompt_tokens": 0,
+        }
         if state:
+            for key, val in defaults.items():
+                state.setdefault(key, val)
             self.state = state
         else:
-            self.state = {
-                "chat_history": [],
-                "metadata": {"session_id": self.session_id},
-            }
+            self.state = defaults
 
     async def _save_state(self):
         await chat_storage.save_context(self.user_id, self.session_id, self.state)
@@ -156,6 +168,17 @@ class AgentExecutor:
         )
         await self._save_state()
 
+        # Check if auto-compaction is needed before this turn
+        if self._needs_compaction():
+            logger.info(
+                "Triggering compaction for session %s (prompt_tokens=%d, limit=%d)",
+                self.session_id,
+                self.state.get("last_prompt_tokens", 0),
+                settings.max_context_tokens,
+            )
+            await self._compact()
+            await self._save_state()
+
         # Retrieve relevant cross-session memories
         memory_context = await self.memory.retrieve(full_query)
 
@@ -184,31 +207,13 @@ class AgentExecutor:
         should_stop = False
         start_time = time.time()
         total_completion_tokens = 0
+        total_prompt_tokens = 0
         block_index = 0
         current_text_block_active = False
 
         try:
             while not should_stop:
-                # Build API-compatible messages (strip non-standard keys like
-                # "thought", "metrics", "attachments" that we store for the UI).
-                api_messages = []
-                for msg in self.state["chat_history"]:
-                    cleaned: dict[str, Any] = {"role": msg["role"]}
-                    if "content" in msg:
-                        cleaned["content"] = msg["content"]
-                    if "tool_calls" in msg:
-                        cleaned["tool_calls"] = msg["tool_calls"]
-                    if "tool_call_id" in msg:
-                        cleaned["tool_call_id"] = msg["tool_call_id"]
-                    if "name" in msg:
-                        cleaned["name"] = msg["name"]
-                    api_messages.append(cleaned)
-
-                # Inject the formatted prompt into the most recent user message for the API call
-                for i in reversed(range(len(api_messages))):
-                    if api_messages[i]["role"] == "user":
-                        api_messages[i]["content"] = user_content
-                        break
+                api_messages = self._build_api_messages(user_content)
 
                 response = await openai_client.chat.completions.create(
                     **completion_args,
@@ -223,6 +228,8 @@ class AgentExecutor:
                     async for chunk in response:
                         if chunk.usage:
                             total_completion_tokens += chunk.usage.completion_tokens
+                            if chunk.usage.prompt_tokens:
+                                total_prompt_tokens = chunk.usage.prompt_tokens
 
                         if not chunk.choices:
                             continue
@@ -330,6 +337,13 @@ class AgentExecutor:
                     assistant_msg["metrics"] = metrics
                     self.state["chat_history"].append(assistant_msg)
                     should_stop = True
+
+                    # Update prompt token tracking for compaction decisions
+                    if total_prompt_tokens > 0:
+                        self.state["last_prompt_tokens"] = total_prompt_tokens
+                    else:
+                        # Fallback: estimate from message content lengths (~4 chars/token)
+                        self.state["last_prompt_tokens"] = self._estimate_prompt_tokens()
                     await self._save_state()
 
                     # Fire-and-forget: extract memories from this exchange
@@ -337,6 +351,11 @@ class AgentExecutor:
                         self.memory.extract_and_store(query, final_content)
                     )
 
+                    max_ctx = get_model_context_limit(model_name)
+                    yield TokenUsageEvent(
+                        current_tokens=self.state["last_prompt_tokens"],
+                        max_tokens=max_ctx,
+                    )
                     yield FinalResponseEvent(content=final_content, metrics=metrics)
                     return
 
@@ -345,6 +364,127 @@ class AgentExecutor:
             yield ErrorEvent(error=str(e))
         finally:
             await self._save_state()
+
+    async def _compact(self) -> None:
+        """Summarize older messages into a rolling compaction summary,
+        keeping only the most recent messages in full for the LLM context."""
+        keep_recent = settings.compaction_keep_recent
+        history = self.state["chat_history"]
+        start_idx = self.state.get("summarized_until_index", 0)
+        end_idx = max(start_idx, len(history) - keep_recent)
+
+        if end_idx <= start_idx:
+            return
+
+        segment = history[start_idx:end_idx]
+        existing = self.state.get("compacted_summary") or ""
+
+        # Build a text representation of the segment to summarize
+        lines = []
+        for msg in segment:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            if role == "tool":
+                name = msg.get("name", "tool")
+                content = f"[{name} result]: {str(content)[:settings.compaction_tool_result_max_chars]}"
+                lines.append(f"Tool ({name}): {content}")
+            elif role == "assistant":
+                tool_calls = msg.get("tool_calls", [])
+                if tool_calls:
+                    tc_names = [tc.get("function", {}).get("name", "?") for tc in tool_calls]
+                    content = f"[Called tools: {', '.join(tc_names)}] {content}"
+                lines.append(f"Assistant: {content}")
+            elif role == "user":
+                lines.append(f"User: {content}")
+
+        segment_text = "\n".join(lines)
+        if not segment_text.strip():
+            return
+
+        prompt = COMPACTION_PROMPT.format(
+            existing=existing or "(No prior summary)",
+            segment_text=segment_text,
+        )
+
+        try:
+            completion_args = get_completion_args(model=settings.compaction_model)
+            completion_args["temperature"] = settings.compaction_temperature
+            completion_args["max_tokens"] = settings.compaction_max_tokens
+            response = await openai_client.chat.completions.create(
+                **completion_args,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            new_summary = response.choices[0].message.content or ""
+            if new_summary.strip():
+                self.state["compacted_summary"] = new_summary.strip()
+            self.state["summarized_until_index"] = end_idx
+            logger.info(
+                "Compacted %d messages (indices %d-%d) for session %s",
+                len(segment), start_idx, end_idx - 1, self.session_id,
+            )
+        except Exception:
+            logger.exception("Compaction summarization failed for session %s", self.session_id)
+
+    def _needs_compaction(self) -> bool:
+        """Check whether the conversation context is approaching the limit."""
+        threshold = int(settings.max_context_tokens * settings.compaction_trigger_pct)
+        last_tokens = self.state.get("last_prompt_tokens", 0)
+        if last_tokens == 0:
+            return False
+        return last_tokens >= threshold
+
+    def _estimate_prompt_tokens(self) -> int:
+        """Rough token count from message content as fallback when the API
+        doesn't report prompt_tokens. Uses ~4 chars per token (conservative)."""
+        total = 0
+        for msg in self.state.get("chat_history", []):
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                content = " ".join(
+                    part.get("text", "") for part in content if isinstance(part, dict)
+                )
+            total += len(str(content))
+        return max(1, total // 4)
+
+    def _build_api_messages(
+        self, user_content: str | list[dict]
+    ) -> list[dict[str, Any]]:
+        """Build the list of messages to send to the LLM, optionally compacted."""
+        history = self.state["chat_history"]
+        summarized_until = self.state.get("summarized_until_index", 0)
+        compacted_summary = self.state.get("compacted_summary")
+
+        api_messages: list[dict[str, Any]] = []
+        if compacted_summary and summarized_until > 0:
+            api_messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "[The following is a summary of the earlier conversation, "
+                        "provided so you can continue without losing context.]\n\n"
+                        f"{compacted_summary}"
+                    ),
+                }
+            )
+            history = history[summarized_until:]
+
+        for msg in history:
+            cleaned = {"role": msg["role"]}
+            if "content" in msg:
+                cleaned["content"] = msg["content"]
+            if "tool_calls" in msg:
+                cleaned["tool_calls"] = msg["tool_calls"]
+            if "tool_call_id" in msg:
+                cleaned["tool_call_id"] = msg["tool_call_id"]
+            if "name" in msg:
+                cleaned["name"] = msg["name"]
+            api_messages.append(cleaned)
+        for i in reversed(range(len(api_messages))):
+            if api_messages[i]["role"] == "user":
+                api_messages[i]["content"] = user_content
+                break
+
+        return api_messages
 
     async def get_history(self) -> list[ChatMessage]:
         await self._load_state()

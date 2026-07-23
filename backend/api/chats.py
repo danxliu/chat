@@ -29,6 +29,9 @@ async def create_chat(
         {
             "chat_history": [],
             "metadata": {"session_id": session_id},
+            "compacted_summary": None,
+            "summarized_until_index": 0,
+            "last_prompt_tokens": 0,
         },
     )
     return {"session_id": session_id}
@@ -80,7 +83,11 @@ async def get_chat_history(
 ):
     executor = AgentExecutor(session_id, user_id=user_id)
     history = await executor.get_history()
-    return {"history": history}
+    token_usage = {
+        "current": executor.state.get("last_prompt_tokens", 0),
+        "max": settings.max_context_tokens,
+    }
+    return {"history": history, "token_usage": token_usage}
 
 
 @router.delete("/memories")
