@@ -22,32 +22,33 @@
     import * as Sheet from "$lib/components/ui/sheet";
 
     let scrollAreaViewport = $state<HTMLElement | null>(null);
-    let isAtBottom = true;
-    let userScrolledUp = false;
-    let programmaticScroll = false;
+    let bottomSentinel = $state<HTMLElement | null>(null);
+    let autoScroll = $state(true);
     let previousSessionId: string | null = null;
     let previousMessages: Message[] = [];
 
     function handleScroll(e: Event) {
-        // Ignore scroll events triggered by our own programmatic scrollTo calls.
-        // On Firefox, scroll events fire asynchronously, which can cause a race
-        // where handleScroll runs after content has grown past the scroll target,
-        // poisoning userScrolledUp to true permanently.
-        if (programmaticScroll) return;
-
         const target = e.target as HTMLElement;
-        const threshold = 100; // px
-        const atBottom =
-            target.scrollHeight - target.scrollTop - target.clientHeight <
-            threshold;
-        isAtBottom = atBottom;
-        if (atBottom) {
-            // User manually scrolled back to the bottom — resume auto-follow.
-            userScrolledUp = false;
-        } else {
-            userScrolledUp = true;
-        }
+        const distToBottom =
+            target.scrollHeight - target.scrollTop - target.clientHeight;
+        autoScroll = distToBottom < 5;
     }
+
+    function handleUserScrollIntent(e: WheelEvent) {
+        if (e.deltaY < 0) autoScroll = false;
+    }
+
+    $effect(() => {
+        const viewport = scrollAreaViewport;
+        if (!viewport) return;
+
+        viewport.addEventListener("wheel", handleUserScrollIntent, {
+            passive: true,
+        });
+        return () => {
+            viewport.removeEventListener("wheel", handleUserScrollIntent);
+        };
+    });
 
     onMount(async () => {
         connectWebSocket();
@@ -62,70 +63,51 @@
         }
     });
 
-    // Auto-scroll to bottom when messages change
+    function scrollToBottom() {
+        const sentinel = bottomSentinel;
+        if (!sentinel) return;
+        requestAnimationFrame(() => {
+            if (!autoScroll) return;
+            sentinel.scrollIntoView({ block: "end" });
+            requestAnimationFrame(() => {
+                if (!autoScroll) return;
+                sentinel.scrollIntoView({ block: "end" });
+            });
+        });
+    }
+
     $effect(() => {
         const messages = $currentMessages;
         const sessionId = $currentSessionId;
         const isGen = $currentIsGenerating;
         const viewport = scrollAreaViewport;
 
-        if (messages && viewport) {
-            untrack(() => {
-                const sessionChanged = previousSessionId !== sessionId;
-                const messagesChanged = messages !== previousMessages;
+        if (!messages || !viewport) return;
 
-                previousSessionId = sessionId;
-                previousMessages = messages;
+        untrack(() => {
+            const sessionChanged = previousSessionId !== sessionId;
+            const messagesChanged = messages !== previousMessages;
+            const wasEmpty = previousMessages.length === 0;
 
-                if (!sessionChanged && !messagesChanged) return;
+            previousSessionId = sessionId;
+            previousMessages = messages;
 
-                // Reset scroll state on session switch so the new chat starts fresh.
-                if (sessionChanged) {
-                    userScrolledUp = false;
-                    isAtBottom = true;
-                }
+            if (!sessionChanged && !messagesChanged) return;
 
-                // The newest message is a user message exactly when the user just
-                // sent something — always jump to the bottom in that case,
-                // regardless of any prior `userScrolledUp` state.
-                const lastMessage = messages[messages.length - 1];
-                const justSentUserMessage =
-                    messagesChanged &&
-                    lastMessage &&
-                    lastMessage.role === "user";
+            const lastMsg = messages[messages.length - 1];
+            const isNewUserMessage =
+                messagesChanged && lastMsg?.role === "user";
+            const historyLoaded =
+                messagesChanged &&
+                wasEmpty &&
+                messages.length > 0 &&
+                !isGen;
 
-                // History was just loaded for this session (empty → non-empty
-                // while not generating). Always scroll so the user sees the
-                // latest messages.
-                const historyJustLoaded =
-                    messagesChanged &&
-                    previousMessages.length === 0 &&
-                    messages.length > 0 &&
-                    !isGen;
-
-                const shouldScroll =
-                    justSentUserMessage ||
-                    sessionChanged ||
-                    historyJustLoaded ||
-                    (isGen && isAtBottom && !userScrolledUp);
-
-                if (shouldScroll) {
-                    // Double requestAnimationFrame ensures the browser has
-                    // completed layout of the new DOM content before we read
-                    // scrollHeight.  setTimeout(50) is unreliable — on fast
-                    // streaming (80+ tokens/sec) and with complex rendering
-                    // (KaTeX, highlight.js), 50 ms is not enough.
-                    programmaticScroll = true;
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            viewport.scrollTop = viewport.scrollHeight;
-                            isAtBottom = true;
-                            programmaticScroll = false;
-                        });
-                    });
-                }
-            });
-        }
+            if (sessionChanged || isNewUserMessage || historyLoaded) {
+                autoScroll = true;
+            }
+            if (autoScroll) scrollToBottom();
+        });
     });
 </script>
 
@@ -176,7 +158,7 @@
         </header>
 
         <div
-            class="flex-1 overflow-y-auto min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            class="flex-1 overflow-y-auto min-h-0"
             bind:this={scrollAreaViewport}
             onscroll={handleScroll}
         >
@@ -205,6 +187,7 @@
                         </p>
                     </div>
                 {/if}
+                <div bind:this={bottomSentinel}></div>
             </div>
         </div>
 
